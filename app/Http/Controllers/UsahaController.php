@@ -464,24 +464,15 @@ class UsahaController extends Controller
 */
 
         $progressData = Usaha::query()
-            ->join(
-                'usaha_uploads',
-                'usaha.upload_id',
-                '=',
-                'usaha_uploads.id'
-            )
+            ->join('usaha_uploads', 'usaha.upload_id', '=', 'usaha_uploads.id')
             ->select(
                 'usaha.ppl',
                 'usaha_uploads.upload_date',
-
-                DB::raw('SUM(usaha.jumlah_usaha_ditemukan_bku) as bku'),
-                DB::raw('SUM(usaha.jumlah_usaha_ditemukan_usaha_keluarga) as usaha_keluarga'),
+                DB::raw('SUM(usaha.jumlah_usaha_ditemukan_bku + usaha.jumlah_usaha_baru_bku) as bku'),
+                DB::raw('SUM(usaha.jumlah_usaha_ditemukan_usaha_keluarga + usaha.jumlah_usaha_baru_usaha_keluarga) as usaha_keluarga'),
                 DB::raw('SUM(usaha.jumlah_keluarga_ditemukan) as keluarga')
             )
-            ->groupBy(
-                'usaha.ppl',
-                'usaha_uploads.upload_date'
-            )
+            ->groupBy('usaha.ppl', 'usaha_uploads.upload_date')
             ->get();
 
         /*
