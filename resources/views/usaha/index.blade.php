@@ -469,66 +469,69 @@
             </div>
 
         </div>
-        {{-- =========================================================
-        TABEL 1 - PERKEMBANGAN DATA BERDASARKAN TANGGAL
-        ========================================================== --}}
+
+        {{-- TABEL 1 - PERKEMBANGAN DATA BERDASARKAN TANGGAL --}}
 
         <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-
-            <div class="px-5 py-4 border-b border-slate-200">
-
-                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wide">
+        {{-- Header tabel --}}
+            <div class="px-5 py-4 border-b border-slate-100">
+                <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wide">
                     Perkembangan Data Usaha
                 </h3>
-
-                <p class="mt-1 text-xs text-slate-400">
-                    Perbandingan jumlah BKU, Usaha Keluarga, dan Keluarga berdasarkan tanggal upload. Klik baris kecamatan
-                    untuk melihat rincian per petugas.
+                <p class="mt-1 text-xs text-slate-900">
+                    Perbandingan jumlah BKU, Usaha Keluarga, dan Keluarga berdasarkan tanggal upload.
+                    Klik baris kecamatan untuk melihat rincian per petugas.
                 </p>
-
             </div>
 
             <div class="overflow-x-auto">
 
                 <table class="w-full text-sm">
 
-                    <thead class="bg-slate-100">
-
-                        {{-- BARIS 1: NAMA TANGGAL --}}
+                    <thead class="bg-white border-b border-slate-200">
                         <tr>
-
                             <th rowspan="2"
-                                class="sticky left-0 z-10 bg-slate-100 px-5 py-4 text-left
-                               text-[11px] uppercase tracking-wider text-slate-500
-                               whitespace-nowrap border-r border-slate-200 align-bottom">
+                                class="sticky left-0 z-10 px-5 py-4 text-left
+                        text-[11px] uppercase tracking-wider text-slate-900
+                        whitespace-nowrap border-r border-slate-200 align-bottom">
                                 Kecamatan / Petugas
                             </th>
 
                             @foreach ($tanggalUploads as $tanggal)
                                 <th colspan="3"
                                     class="px-6 py-3 text-center text-[11px]
-                                   uppercase tracking-wider text-slate-500
-                                   whitespace-nowrap border-l border-slate-200">
+                            uppercase tracking-wider text-slate-900
+                            whitespace-nowrap border-l border-slate-200">
+
                                     {{ \Carbon\Carbon::parse($tanggal)->translatedFormat('d F Y') }}
+
                                 </th>
                             @endforeach
 
                         </tr>
 
-                        {{-- BARIS 2: SUB-KOLOM BKU / USAHA KELUARGA / KELUARGA --}}
                         <tr>
 
                             @foreach ($tanggalUploads as $tanggal)
                                 <th
-                                    class="px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-wider text-slate-400 border-l border-slate-200 whitespace-nowrap">
+                                    class="px-3 py-2 text-center text-[12px]
+                            font-semibold uppercase tracking-wider
+                            text-slate-900 border-l border-slate-200
+                            whitespace-nowrap">
                                     BKU
                                 </th>
+
                                 <th
-                                    class="px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-wider text-slate-400 whitespace-nowrap">
+                                    class="px-3 py-2 text-center text-[12px]
+                            font-semibold uppercase tracking-wider
+                            text-slate-900 whitespace-nowrap">
                                     Usaha Keluarga
                                 </th>
+
                                 <th
-                                    class="px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-wider text-slate-400 whitespace-nowrap">
+                                    class="px-3 py-2 text-center text-[12px]
+                            font-semibold uppercase tracking-wider
+                            text-slate-900 whitespace-nowrap">
                                     Keluarga
                                 </th>
                             @endforeach
@@ -537,74 +540,336 @@
 
                     </thead>
 
+                    {{--  BODY--}}
 
                     @forelse ($progressTable as $kecamatan => $group)
 
                         <tbody x-data="{ open: false }" class="divide-y divide-slate-100">
 
-                            {{-- BARIS KECAMATAN (KLIK UNTUK EXPAND) --}}
-                            <tr @click="open = !open" class="hover:bg-slate-50 cursor-pointer transition-colors">
+                            {{-- BARIS KECAMATAN --}}
 
-                                {{-- NAMA KECAMATAN --}}
+                            <tr @click="open = !open" class="hover:bg-slate-50 cursor-pointer transition-colors">
+                                {{-- NAMA KECAMATAN--}}
                                 <td
                                     class="sticky left-0 z-10 bg-white px-5 py-4
-                                   font-semibold text-slate-700 whitespace-nowrap
-                                   border-r border-slate-200">
-                                    <span x-text="open ? '▾' : '▸'" class="mr-2 text-slate-400"></span>
-                                    {{ $kecamatan }}
-                                </td>
+                            font-semibold text-slate-700 whitespace-nowrap
+                            border-r border-slate-200">
 
-                                {{-- TOTAL PER TANGGAL: 3 KOLOM --}}
+                                    <span x-text="open ? '▾' : '▸'" class="mr-2 text-slate-900">
+                                    </span>
+
+                                    {{ $kecamatan }}
+
+                                </td>
+                                {{-- DATA KECAMATAN PER TANGGAL --}}
                                 @foreach ($tanggalUploads as $tanggal)
                                     @php
+
                                         $tanggalKey = \Carbon\Carbon::parse($tanggal)->format('Y-m-d');
 
                                         $item = $group['totals'][$tanggalKey] ?? null;
+
                                     @endphp
 
+                                    {{-- BKU --}}
+
                                     <td
-                                        class="px-3 py-4 text-center whitespace-nowrap font-semibold text-slate-800 border-l border-slate-100">
-                                        {{ $item ? number_format($item['bku']) : '-' }}
+                                        class="px-3 py-4 text-center whitespace-nowrap
+                                border-l border-slate-100">
+                                        @if ($item)
+                                            {{-- NILAI --}}
+                                            <div class="font-semibold text-slate-900">
+
+                                                {{ number_format($item['bku']) }}
+
+                                            </div>
+
+                                            {{-- PERSENTASE --}}
+                                            @php
+
+                                                $persen = $item['percentage']['bku'] ?? null;
+
+                                                $trend = $item['trend']['bku'] ?? 'none';
+
+                                            @endphp
+
+
+                                            @if ($persen !== null)
+                                                <div
+                                                    class="mt-1 text-[11px] font-semibold
+                                            {{ $trend === 'up' ? 'text-green-600' : ($trend === 'down' ? 'text-red-600' : 'text-slate-400') }}">
+
+                                                    @if ($trend === 'up')
+                                                        ↑
+                                                    @elseif ($trend === 'down')
+                                                        ↓
+                                                    @else
+                                                        →
+                                                    @endif
+
+                                                    {{ number_format(abs($persen), 1) }}%
+
+                                                </div>
+                                            @endif
+                                        @else
+                                            -
+                                        @endif
+
                                     </td>
-                                    <td class="px-3 py-4 text-center whitespace-nowrap text-slate-600">
-                                        {{ $item ? number_format($item['usaha_keluarga']) : '-' }}
+
+                                    {{-- USAHA KELUARGA --}}
+
+                                    <td class="px-3 py-4 text-center whitespace-nowrap">
+
+                                        @if ($item)
+                                            {{-- NILAI --}}
+                                            <div class="text-slate-900 font-semibold">
+
+                                                {{ number_format($item['usaha_keluarga']) }}
+
+                                            </div>
+
+
+                                            {{-- PERSENTASE --}}
+                                            @php
+
+                                                $persen = $item['percentage']['usaha_keluarga'] ?? null;
+
+                                                $trend = $item['trend']['usaha_keluarga'] ?? 'none';
+
+                                            @endphp
+
+
+                                            @if ($persen !== null)
+                                                <div
+                                                    class="mt-1 text-[11px] font-semibold
+                                            {{ $trend === 'up' ? 'text-green-600' : ($trend === 'down' ? 'text-red-600' : 'text-slate-400') }}">
+
+                                                    @if ($trend === 'up')
+                                                        ↑
+                                                    @elseif ($trend === 'down')
+                                                        ↓
+                                                    @else
+                                                        →
+                                                    @endif
+
+                                                    {{ number_format(abs($persen), 1) }}%
+
+                                                </div>
+                                            @endif
+                                        @else
+                                            -
+                                        @endif
+
                                     </td>
-                                    <td class="px-3 py-4 text-center whitespace-nowrap text-slate-600">
-                                        {{ $item ? number_format($item['keluarga']) : '-' }}
+
+                                    {{-- KELUARGA --}}
+
+                                    <td class="px-3 py-4 text-center whitespace-nowrap">
+
+                                        @if ($item)
+                                            <div class="text-slate-900 font-semibold">
+                                                {{ number_format($item['keluarga']) }}
+                                            </div>
+
+                                            @php
+                                                $persen = $item['percentage']['keluarga'] ?? null;
+                                                $trend = $item['trend']['keluarga'] ?? 'none';
+                                            @endphp
+
+                                            @if ($persen !== null)
+                                                <div
+                                                    class="mt-1 text-[11px] font-semibold
+                {{ $trend === 'up' ? 'text-green-600' : ($trend === 'down' ? 'text-red-600' : 'text-slate-400') }}">
+
+                                                    @if ($trend === 'up')
+                                                        ↑
+                                                    @elseif ($trend === 'down')
+                                                        ↓
+                                                    @else
+                                                        →
+                                                    @endif
+
+                                                    {{ number_format(abs($persen), 1) }}%
+
+                                                </div>
+                                            @elseif ($item['keluarga'] > 0)
+                                                <div class="mt-1 text-[11px] font-semibold text-green-600">
+                                                    ↑ Baru
+                                                </div>
+                                                {{-- @else
+                                                <div class="mt-1 text-[12px] font-semibold text-slate-400">
+                                                    → 0%
+                                                </div> --}}
+                                            @endif
+                                        @else
+                                            -
+                                        @endif
+
                                     </td>
                                 @endforeach
 
                             </tr>
 
-                            {{-- BARIS PETUGAS (MUNCUL SAAT KECAMATAN DI-KLIK) --}}
+                            {{-- BARIS PETUGAS --}}
+
                             @foreach ($group['petugas'] as $namaPetugas => $tanggalData)
                                 <tr x-show="open" x-cloak class="bg-slate-50/60">
 
                                     {{-- NAMA PETUGAS --}}
+
                                     <td
-                                        class="sticky left-0 z-10 bg-slate-50/60 pl-10 pr-5 py-3
-                                       text-slate-600 whitespace-nowrap
-                                       border-r border-slate-200">
+                                        class="sticky left-0 z-10 bg-slate-50/60
+                                pl-10 pr-5 py-3 text-slate-900
+                                whitespace-nowrap border-r border-slate-200">
+
                                         {{ $namaPetugas }}
+
                                     </td>
 
-                                    {{-- DATA PER TANGGAL: 3 KOLOM --}}
+                                    {{-- DATA PETUGAS PER TANGGAL --}}
+
                                     @foreach ($tanggalUploads as $tanggal)
                                         @php
+
                                             $tanggalKey = \Carbon\Carbon::parse($tanggal)->format('Y-m-d');
 
                                             $item = $tanggalData[$tanggalKey] ?? null;
+
                                         @endphp
 
+                                        {{-- BKU PETUGAS --}}
+
                                         <td
-                                            class="px-3 py-3 text-center whitespace-nowrap text-sm font-semibold text-slate-700 border-l border-slate-100">
-                                            {{ $item ? number_format($item['bku']) : '-' }}
+                                            class="px-3 py-3 text-center whitespace-nowrap
+                                    border-l border-slate-200">
+
+                                            @if ($item)
+                                                {{-- NILAI --}}
+                                                <div class="text-sm font-semibold text-slate-700">
+
+                                                    {{ number_format($item['bku']) }}
+
+                                                </div>
+
+                                                {{-- PERSENTASE --}}
+                                                @php
+
+                                                    $persen = $item['percentage']['bku'] ?? null;
+
+                                                    $trend = $item['trend']['bku'] ?? 'none';
+
+                                                @endphp
+
+                                                @if ($persen !== null)
+                                                    <div
+                                                        class="mt-1 text-[11px] font-semibold
+                                                {{ $trend === 'up' ? 'text-green-600' : ($trend === 'down' ? 'text-red-600' : 'text-slate-900') }}">
+
+                                                        @if ($trend === 'up')
+                                                            ↑
+                                                        @elseif ($trend === 'down')
+                                                            ↓
+                                                        @else
+                                                            →
+                                                        @endif
+
+                                                        {{ number_format(abs($persen), 1) }}%
+
+                                                    </div>
+                                                @endif
+                                            @else
+                                                -
+                                            @endif
+
                                         </td>
-                                        <td class="px-3 py-3 text-center whitespace-nowrap text-sm text-slate-500">
-                                            {{ $item ? number_format($item['usaha_keluarga']) : '-' }}
+
+                                        {{-- USAHA KELUARGA PETUGAS --}}
+
+                                        <td class="px-3 py-3 text-center whitespace-nowrap">
+
+                                            @if ($item)
+                                                {{-- NILAI --}}
+                                                <div class="text-sm text-slate-900">
+
+                                                    {{ number_format($item['usaha_keluarga']) }}
+
+                                                </div>
+
+                                                {{-- PERSENTASE --}}
+                                                @php
+
+                                                    $persen = $item['percentage']['usaha_keluarga'] ?? null;
+
+                                                    $trend = $item['trend']['usaha_keluarga'] ?? 'none';
+
+                                                @endphp
+
+                                                @if ($persen !== null)
+                                                    <div
+                                                        class="mt-1 text-[11px] font-semibold
+                                                {{ $trend === 'up' ? 'text-green-600' : ($trend === 'down' ? 'text-red-600' : 'text-slate-900') }}">
+
+                                                        @if ($trend === 'up')
+                                                            ↑
+                                                        @elseif ($trend === 'down')
+                                                            ↓
+                                                        @else
+                                                            →
+                                                        @endif
+
+                                                        {{ number_format(abs($persen), 1) }}%
+
+                                                    </div>
+                                                @endif
+                                            @else
+                                                -
+                                            @endif
+
                                         </td>
-                                        <td class="px-3 py-3 text-center whitespace-nowrap text-sm text-slate-500">
-                                            {{ $item ? number_format($item['keluarga']) : '-' }}
+
+                                        {{-- KELUARGA PETUGAS --}}
+
+                                        <td class="px-3 py-3 text-center whitespace-nowrap">
+
+                                            @if ($item)
+                                                {{-- NILAI --}}
+                                                <div class="text-sm text-slate-900">
+
+                                                    {{ number_format($item['keluarga']) }}
+
+                                                </div>
+
+                                                {{-- PERSENTASE --}}
+                                                @php
+
+                                                    $persen = $item['percentage']['keluarga'] ?? null;
+
+                                                    $trend = $item['trend']['keluarga'] ?? 'none';
+
+                                                @endphp
+
+                                                @if ($persen !== null)
+                                                    <div
+                                                        class="mt-1 text-[11px] font-semibold
+                                                {{ $trend === 'up' ? 'text-green-600' : ($trend === 'down' ? 'text-red-600' : 'text-slate-900') }}">
+
+                                                        @if ($trend === 'up')
+                                                            ↑
+                                                        @elseif ($trend === 'down')
+                                                            ↓
+                                                        @else
+                                                            →
+                                                        @endif
+
+                                                        {{ number_format(abs($persen), 1) }}%
+
+                                                    </div>
+                                                @endif
+                                            @else
+                                                -
+                                            @endif
+
                                         </td>
                                     @endforeach
 
@@ -613,17 +878,24 @@
 
                         </tbody>
 
+
                     @empty
 
+                        {{--  DATA KOSONG --}}
+
                         <tbody>
+
                             <tr>
 
                                 <td colspan="{{ count($tanggalUploads) * 3 + 1 }}"
                                     class="px-5 py-10 text-center text-slate-400">
+
                                     Belum ada data perkembangan Usaha.
+
                                 </td>
 
                             </tr>
+
                         </tbody>
 
                     @endforelse
@@ -634,9 +906,7 @@
 
         </div>
 
-        {{-- =========================================================
-        FILTER KOLOM TABEL USAHA
-        ========================================================== --}}
+        {{-- FILTER KOLOM TABEL USAHA --}}
 
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
@@ -862,9 +1132,7 @@
 
         </div>
 
-        {{-- =========================================================
-            TABEL USAHA
-        ========================================================== --}}
+        {{-- TABEL USAHA --}}
 
         <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
 
@@ -949,127 +1217,323 @@
 
                     </thead>
 
-                    @forelse ($dataGrouped as $kecamatan => $petugasGroups)
+                    @forelse ($dataGrouped as $kecamatan => $group)
+
+                        @php
+                            $totals = $group['totals'];
+                            $petugasGroups = $group['petugas'];
+                        @endphp
 
                         <tbody x-data="{ open: false }" class="divide-y divide-slate-100">
 
-                            {{-- BARIS KECAMATAN --}}
                             <tr @click="open = !open"
                                 class="bg-slate-100 hover:bg-slate-200 cursor-pointer transition-colors">
-                                <td :colspan="1 + $store.usahaColumns.visibleCount()"
-                                    class="px-5 py-3 font-bold text-slate-700 whitespace-nowrap
-                       sticky left-0 z-10 bg-slate-100">
+                                <td
+                                    class="px-5 py-3 font-bold text-slate-700 whitespace-nowrap sticky left-0 z-10 bg-slate-100">
                                     <span x-text="open ? '▾' : '▸'" class="mr-2 text-slate-400"></span>
                                     {{ $kecamatan }}
                                 </td>
+
+                                <td x-show="$store.usahaColumns.id_wilayah" x-cloak class="px-5 py-3 bg-slate-100">
+                                </td>
+
+                                <td x-show="$store.usahaColumns.kd_kab" x-cloak
+                                    class="px-5 py-3 bg-slate-100 font-semibold text-slate-600">
+                                    {{ $petugasGroups->first()->first()->kd_kab ?? '' }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.nama_sls" x-cloak
+                                    class="px-5 py-3 font-semibold bg-slate-100">
+                                    
+                                </td>
+
+                                <td x-show="$store.usahaColumns.ub_prelist" x-cloak
+                                    class="px-5 py-3 text-right font-bold bg-slate-100">
+                                    {{ number_format($totals['jumlah_ub_prelist_awal'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.um_prelist" x-cloak
+                                    class="px-5 py-3 text-right font-bold bg-slate-100">
+                                    {{ number_format($totals['jumlah_um_prelist_awal'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.umk_prelist" x-cloak
+                                    class="px-5 py-3 text-right font-bold bg-slate-100">
+                                    {{ number_format($totals['jumlah_umk_prelist_awal'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.usaha_ditemukan_bku" x-cloak
+                                    class="px-5 py-3 text-right font-bold text-emerald-600 bg-slate-100">
+                                    {{ number_format($totals['jumlah_usaha_ditemukan_bku'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.usaha_ditutup_bku" x-cloak
+                                    class="px-5 py-3 text-right font-bold text-red-600 bg-slate-100">
+                                    {{ number_format($totals['jumlah_usaha_ditutup_bku'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.usaha_ganda_bku" x-cloak
+                                    class="px-5 py-3 text-right font-bold text-amber-600 bg-slate-100">
+                                    {{ number_format($totals['jumlah_usaha_ganda_bku'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_bku" x-cloak
+                                    class="px-5 py-3 text-right font-bold text-slate-600 bg-slate-100">
+                                    {{ number_format($totals['jumlah_usaha_tidak_ditemukan_bku'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.usaha_baru_bku" x-cloak
+                                    class="px-5 py-3 text-right font-bold text-blue-600 bg-slate-100">
+                                    {{ number_format($totals['jumlah_usaha_baru_bku'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.usaha_ditemukan_keluarga" x-cloak
+                                    class="px-5 py-3 text-right font-bold bg-slate-100">
+                                    {{ number_format($totals['jumlah_usaha_ditemukan_usaha_keluarga'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.usaha_tutup_keluarga" x-cloak
+                                    class="px-5 py-3 text-right font-bold bg-slate-100">
+                                    {{ number_format($totals['jumlah_usaha_tutup_usaha_keluarga'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.usaha_ganda_keluarga" x-cloak
+                                    class="px-5 py-3 text-right font-bold bg-slate-100">
+                                    {{ number_format($totals['jumlah_usaha_ganda_usaha_keluarga'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_keluarga" x-cloak
+                                    class="px-5 py-3 text-right font-bold bg-slate-100">
+                                    {{ number_format($totals['jumlah_usaha_tidak_ditemukan_usaha_keluarga'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.usaha_baru_keluarga" x-cloak
+                                    class="px-5 py-3 text-right font-bold bg-slate-100">
+                                    {{ number_format($totals['jumlah_usaha_baru_usaha_keluarga'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.keluarga_ditemukan" x-cloak
+                                    class="px-5 py-3 text-right font-bold text-emerald-600 bg-slate-100">
+                                    {{ number_format($totals['jumlah_keluarga_ditemukan'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.keluarga_meninggal" x-cloak
+                                    class="px-5 py-3 text-right font-bold text-red-600 bg-slate-100">
+                                    {{ number_format($totals['jumlah_keluarga_meninggal'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.keluarga_tidak_eligible" x-cloak
+                                    class="px-5 py-3 text-right font-bold text-amber-600 bg-slate-100">
+                                    {{ number_format($totals['jumlah_keluarga_tidak_eligible'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.keluarga_tidak_ditemui" x-cloak
+                                    class="px-5 py-3 text-right font-bold text-orange-600 bg-slate-100">
+                                    {{ number_format($totals['jumlah_keluarga_tidak_ditemui'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.keluarga_tidak_ditemukan" x-cloak
+                                    class="px-5 py-3 text-right font-bold text-slate-600 bg-slate-100">
+                                    {{ number_format($totals['jumlah_keluarga_tidak_ditemukan'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.keluarga_baru" x-cloak
+                                    class="px-5 py-3 text-right font-bold text-blue-600 bg-slate-100">
+                                    {{ number_format($totals['jumlah_keluarga_baru'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.prelist_usaha" x-cloak
+                                    class="px-5 py-3 text-right font-bold bg-slate-100">
+                                    {{ number_format($totals['jumlah_prelist_usaha'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.usaha_realisasi" x-cloak
+                                    class="px-5 py-3 text-right font-bold text-sky-600 bg-slate-100">
+                                    {{ number_format($totals['jumlah_usaha_realisasi'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.prelist_keluarga" x-cloak
+                                    class="px-5 py-3 text-right font-bold bg-slate-100">
+                                    {{ number_format($totals['jumlah_prelist_keluarga'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.keluarga_realisasi" x-cloak
+                                    class="px-5 py-3 text-right font-bold text-emerald-600 bg-slate-100">
+                                    {{ number_format($totals['jumlah_keluarga_realisasi'] ?? 0) }}
+                                </td>
+
+                                <td x-show="$store.usahaColumns.ppl" x-cloak class="px-5 py-3 bg-slate-100"></td>
+
+                                <td x-show="$store.usahaColumns.pml" x-cloak class="px-5 py-3 bg-slate-100"></td>
+
+                                <td x-show="$store.usahaColumns.last_update" x-cloak class="px-5 py-3 bg-slate-100"></td>
                             </tr>
 
                             @foreach ($petugasGroups as $namaPetugas => $rows)
-                                {{-- BARIS PETUGAS + EMAIL --}}
                                 <tr x-show="open" x-cloak class="bg-slate-50">
+
                                     <td :colspan="1 + $store.usahaColumns.visibleCount()"
-                                        class="px-5 py-2 pl-10 whitespace-nowrap
-                           sticky left-0 z-10 bg-slate-50">
+                                        class="px-5 py-2 pl-10 whitespace-nowrap sticky left-0 z-10 bg-slate-50">
                                         <div class="font-semibold text-slate-600 text-sm">
                                             {{ $namaPetugas }}
                                         </div>
+
                                         <div class="text-xs text-slate-400">
                                             {{ $rows->first()->email_petugas ?: '-' }}
                                         </div>
                                     </td>
+
                                 </tr>
 
-                                {{-- BARIS DATA SLS --}}
                                 @foreach ($rows as $i => $row)
                                     <tr x-show="open" x-cloak class="hover:bg-slate-50 transition-colors">
 
-                                        <td class="px-5 py-3 text-slate-400">{{ $i + 1 }}</td>
+                                        <td class="px-5 py-3 text-slate-400">
+                                            {{ $i + 1 }}
+                                        </td>
 
                                         <td x-show="$store.usahaColumns.id_wilayah" x-cloak
-                                            class="px-5 py-3 text-slate-600">{{ $row->id_wilayah ?: '-' }}</td>
-                                        <td x-show="$store.usahaColumns.kd_kab" x-cloak
-                                            class="px-5 py-3 text-slate-600 divide-x divide-slate-100">
-                                            {{ $row->kd_kab ?: '-' }}</td>
-                                        <td x-show="$store.usahaColumns.nama_sls" x-cloak class="px-5 py-3">
-                                            <div class="font-semibold text-slate-700">{{ $row->nama_sls ?: '-' }}</div>
+                                            class="px-5 py-3 text-slate-600">
+                                            {{ $row->id_wilayah ?: '-' }}
                                         </td>
+
+                                        <td x-show="$store.usahaColumns.kd_kab" x-cloak class="px-5 py-3 text-slate-600">
+                                            {{ $row->kd_kab ?: '-' }}
+                                        </td>
+
+                                        <td x-show="$store.usahaColumns.nama_sls" x-cloak class="px-5 py-3">
+                                            <div class="font-semibold text-slate-700">
+                                                {{ $row->nama_sls ?: '-' }}
+                                            </div>
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.ub_prelist" x-cloak
                                             class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_ub_prelist_awal ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_ub_prelist_awal ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.um_prelist" x-cloak
                                             class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_um_prelist_awal ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_um_prelist_awal ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.umk_prelist" x-cloak
                                             class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_umk_prelist_awal ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_umk_prelist_awal ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.usaha_ditemukan_bku" x-cloak
                                             class="px-5 py-3 text-right font-semibold text-emerald-600">
-                                            {{ number_format($row->jumlah_usaha_ditemukan_bku ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_usaha_ditemukan_bku ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.usaha_ditutup_bku" x-cloak
                                             class="px-5 py-3 text-right font-semibold text-red-600">
-                                            {{ number_format($row->jumlah_usaha_ditutup_bku ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_usaha_ditutup_bku ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.usaha_ganda_bku" x-cloak
                                             class="px-5 py-3 text-right font-semibold text-amber-600">
-                                            {{ number_format($row->jumlah_usaha_ganda_bku ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_usaha_ganda_bku ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_bku" x-cloak
                                             class="px-5 py-3 text-right font-semibold text-slate-600">
-                                            {{ number_format($row->jumlah_usaha_tidak_ditemukan_bku ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_usaha_tidak_ditemukan_bku ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.usaha_baru_bku" x-cloak
                                             class="px-5 py-3 text-right font-semibold text-blue-600">
-                                            {{ number_format($row->jumlah_usaha_baru_bku ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_usaha_baru_bku ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.usaha_ditemukan_keluarga" x-cloak
                                             class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_usaha_ditemukan_usaha_keluarga ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_usaha_ditemukan_usaha_keluarga ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.usaha_tutup_keluarga" x-cloak
                                             class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_usaha_tutup_usaha_keluarga ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_usaha_tutup_usaha_keluarga ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.usaha_ganda_keluarga" x-cloak
                                             class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_usaha_ganda_usaha_keluarga ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_usaha_ganda_usaha_keluarga ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_keluarga" x-cloak
                                             class="px-5 py-3 text-right font-semibold">
                                             {{ number_format($row->jumlah_usaha_tidak_ditemukan_usaha_keluarga ?? 0) }}
                                         </td>
+
                                         <td x-show="$store.usahaColumns.usaha_baru_keluarga" x-cloak
                                             class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_usaha_baru_usaha_keluarga ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_usaha_baru_usaha_keluarga ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.keluarga_ditemukan" x-cloak
                                             class="px-5 py-3 text-right font-semibold text-emerald-600">
-                                            {{ number_format($row->jumlah_keluarga_ditemukan ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_keluarga_ditemukan ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.keluarga_meninggal" x-cloak
                                             class="px-5 py-3 text-right font-semibold text-red-600">
-                                            {{ number_format($row->jumlah_keluarga_meninggal ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_keluarga_meninggal ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.keluarga_tidak_eligible" x-cloak
                                             class="px-5 py-3 text-right font-semibold text-amber-600">
-                                            {{ number_format($row->jumlah_keluarga_tidak_eligible ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_keluarga_tidak_eligible ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.keluarga_tidak_ditemui" x-cloak
                                             class="px-5 py-3 text-right font-semibold text-orange-600">
-                                            {{ number_format($row->jumlah_keluarga_tidak_ditemui ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_keluarga_tidak_ditemui ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.keluarga_tidak_ditemukan" x-cloak
                                             class="px-5 py-3 text-right font-semibold text-slate-600">
-                                            {{ number_format($row->jumlah_keluarga_tidak_ditemukan ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_keluarga_tidak_ditemukan ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.keluarga_baru" x-cloak
                                             class="px-5 py-3 text-right font-semibold text-blue-600">
-                                            {{ number_format($row->jumlah_keluarga_baru ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_keluarga_baru ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.prelist_usaha" x-cloak
                                             class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_prelist_usaha ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_prelist_usaha ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.usaha_realisasi" x-cloak
                                             class="px-5 py-3 text-right font-semibold text-sky-600">
-                                            {{ number_format($row->jumlah_usaha_realisasi ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_usaha_realisasi ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.prelist_keluarga" x-cloak
                                             class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_prelist_keluarga ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_prelist_keluarga ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.keluarga_realisasi" x-cloak
                                             class="px-5 py-3 text-right font-semibold text-emerald-600">
-                                            {{ number_format($row->jumlah_keluarga_realisasi ?? 0) }}</td>
+                                            {{ number_format($row->jumlah_keluarga_realisasi ?? 0) }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.ppl" x-cloak class="px-5 py-3 text-slate-600">
-                                            {{ $row->ppl ?: '-' }}</td>
+                                            {{ $row->ppl ?: '-' }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.pml" x-cloak class="px-5 py-3 text-slate-600">
-                                            {{ $row->pml ?: '-' }}</td>
+                                            {{ $row->pml ?: '-' }}
+                                        </td>
+
                                         <td x-show="$store.usahaColumns.last_update" x-cloak
                                             class="px-5 py-3 text-slate-600 whitespace-nowrap">
-                                            {{ $row->last_update ?: '-' }}</td>
+                                            {{ $row->last_update ?: '-' }}
+                                        </td>
 
                                     </tr>
                                 @endforeach

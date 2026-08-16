@@ -474,7 +474,6 @@ class UsahaController extends Controller
             )
             ->groupBy('usaha.ppl', 'usaha_uploads.upload_date')
             ->get();
-
         /*
     |--------------------------------------------------------------------------
     | KELOMPOKKAN DATA USAHA: KECAMATAN -> PETUGAS
@@ -486,9 +485,53 @@ class UsahaController extends Controller
                 return $row->nama_kecamatan ?: 'Tanpa Kecamatan';
             })
             ->map(function ($rowsByKecamatan) {
-                return $rowsByKecamatan->groupBy(function ($row) {
-                    return $row->nama_petugas ?: ($row->ppl ?: 'Tanpa Petugas');
-                });
+
+                $totals = [];
+
+                $fields = [
+                    'jumlah_ub_prelist_awal',
+                    'jumlah_um_prelist_awal',
+                    'jumlah_umk_prelist_awal',
+
+                    'jumlah_usaha_ditemukan_bku',
+                    'jumlah_usaha_ditutup_bku',
+                    'jumlah_usaha_ganda_bku',
+                    'jumlah_usaha_tidak_ditemukan_bku',
+                    'jumlah_usaha_baru_bku',
+
+                    'jumlah_usaha_ditemukan_usaha_keluarga',
+                    'jumlah_usaha_tutup_usaha_keluarga',
+                    'jumlah_usaha_ganda_usaha_keluarga',
+                    'jumlah_usaha_tidak_ditemukan_usaha_keluarga',
+                    'jumlah_usaha_baru_usaha_keluarga',
+
+                    'jumlah_keluarga_ditemukan',
+                    'jumlah_keluarga_meninggal',
+                    'jumlah_keluarga_tidak_eligible',
+                    'jumlah_keluarga_tidak_ditemui',
+                    'jumlah_keluarga_tidak_ditemukan',
+                    'jumlah_keluarga_baru',
+
+                    'jumlah_prelist_usaha',
+                    'jumlah_usaha_realisasi',
+                    'jumlah_prelist_keluarga',
+                    'jumlah_keluarga_realisasi',
+                ];
+
+                foreach ($fields as $field) {
+                    $totals[$field] = $rowsByKecamatan->sum($field);
+                }
+
+                $petugas = $rowsByKecamatan
+                    ->groupBy(function ($row) {
+                        return $row->nama_petugas
+                            ?: ($row->ppl ?: 'Tanpa Petugas');
+                    });
+
+                return [
+                    'totals' => $totals,
+                    'petugas' => $petugas,
+                ];
             })
             ->sortKeys();
         /*
@@ -538,7 +581,157 @@ class UsahaController extends Controller
 
         ksort($progressTable);
 
+        // | HITUNG PERSENTASE PERKEMBANGAN
+        // | Dibandingkan dengan tanggal upload sebelumnya
 
+        $hitungProgress = function ($data) {
+
+            $tanggalKeys = collect($data)
+                ->keys()
+                ->sort()
+                ->values();
+
+            foreach ($tanggalKeys as $index => $tanggal) {
+
+                /* TANGGAL PERTAMA        */
+
+                if ($index === 0) {
+
+                    $data[$tanggal]['percentage'] = [
+                        'bku' => null,
+                        'usaha_keluarga' => null,
+                        'keluarga' => null,
+                    ];
+
+                    $data[$tanggal]['trend'] = [
+                        'bku' => 'none',
+                        'usaha_keluarga' => 'none',
+                        'keluarga' => 'none',
+                    ];
+
+                    continue;
+                }
+
+                // | TANGGAL SEBELUMNYA
+
+                $tanggalSebelumnya = $tanggalKeys[$index - 1];
+
+                $sekarang = $data[$tanggal];
+
+                $sebelumnya = $data[$tanggalSebelumnya];
+
+                //  FUNCTION HITUNG PERSENTASE        
+
+                $hitungPersen = function ($sekarang, $sebelumnya) {
+                    if ($sebelumnya == 0) {
+                        return null;
+                    }
+
+                    if ($sebelumnya == 0 && $sekarang > 0) {
+                        return 100;
+                    }
+
+                    if ($sebelumnya > 0 && $sekarang == 0) {
+                        return -100;
+                    }
+
+                    return (($sekarang - $sebelumnya) / $sebelumnya) * 100;
+                };
+
+                // | HITUNG BKU
+
+                $persenBku = $hitungPersen(
+                    $sekarang['bku'],
+                    $sebelumnya['bku']
+                );
+
+
+                // | HITUNG USAHA KELUARGA
+
+                $persenUsahaKeluarga = $hitungPersen(
+                    $sekarang['usaha_keluarga'],
+                    $sebelumnya['usaha_keluarga']
+                );
+
+                // | HITUNG KELUARGA
+                $persenKeluarga = $hitungPersen(
+                    $sekarang['keluarga'],
+                    $sebelumnya['keluarga']
+                );
+
+
+                // |SIMPAN PERSENTASE
+
+                $data[$tanggal]['percentage'] = [
+
+                    'bku' => $persenBku,
+
+                    'usaha_keluarga' => $persenUsahaKeluarga,
+
+                    'keluarga' => $persenKeluarga,
+
+                ];
+
+                // | SIMPAN TREND
+
+                $data[$tanggal]['trend'] = [
+
+                    'bku' => $persenBku > 0
+                        ? 'up'
+                        : ($persenBku < 0 ? 'down' : 'same'),
+
+                    'usaha_keluarga' => $persenUsahaKeluarga > 0
+                        ? 'up'
+                        : ($persenUsahaKeluarga < 0 ? 'down' : 'same'),
+
+                    'keluarga' => $persenKeluarga > 0
+                        ? 'up'
+                        : ($persenKeluarga < 0 ? 'down' : 'same'),
+
+                ];
+            }
+
+
+            return $data;
+        };
+        /*
+|--------------------------------------------------------------------------
+| TERAPKAN PERSENTASE KE TOTAL KECAMATAN
+|--------------------------------------------------------------------------
+*/
+        foreach ($progressTable as $namaKecamatan => &$kecamatanData) {
+
+            /*
+    |--------------------------------------------------------------------------
+    | TOTAL KECAMATAN
+    |--------------------------------------------------------------------------
+    */
+
+            $kecamatanData['totals'] = $hitungProgress(
+                $kecamatanData['totals']
+            );
+
+
+            /*
+    |--------------------------------------------------------------------------
+    | PER PETUGAS
+    |--------------------------------------------------------------------------
+    */
+
+            foreach (
+                $kecamatanData['petugas']
+                as $namaPetugas => &$petugasData
+            ) {
+
+                $petugasData = $hitungProgress(
+                    $petugasData
+                );
+            }
+
+            unset($petugasData);
+        }
+
+        unset($kecamatanData);
         /*
     |--------------------------------------------------------------------------
     | UBAH JADI KUMULATIF (AKUMULASI SAMPAI TANGGAL TERSEBUT)
