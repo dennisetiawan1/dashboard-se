@@ -534,6 +534,43 @@ class UsahaController extends Controller
                 ];
             })
             ->sortKeys();
+
+
+        $grandTotals = [];
+
+        $fields = [
+            'jumlah_ub_prelist_awal',
+            'jumlah_um_prelist_awal',
+            'jumlah_umk_prelist_awal',
+
+            'jumlah_usaha_ditemukan_bku',
+            'jumlah_usaha_ditutup_bku',
+            'jumlah_usaha_ganda_bku',
+            'jumlah_usaha_tidak_ditemukan_bku',
+            'jumlah_usaha_baru_bku',
+
+            'jumlah_usaha_ditemukan_usaha_keluarga',
+            'jumlah_usaha_tutup_usaha_keluarga',
+            'jumlah_usaha_ganda_usaha_keluarga',
+            'jumlah_usaha_tidak_ditemukan_usaha_keluarga',
+            'jumlah_usaha_baru_usaha_keluarga',
+
+            'jumlah_keluarga_ditemukan',
+            'jumlah_keluarga_meninggal',
+            'jumlah_keluarga_tidak_eligible',
+            'jumlah_keluarga_tidak_ditemui',
+            'jumlah_keluarga_tidak_ditemukan',
+            'jumlah_keluarga_baru',
+
+            'jumlah_prelist_usaha',
+            'jumlah_usaha_realisasi',
+            'jumlah_prelist_keluarga',
+            'jumlah_keluarga_realisasi',
+        ];
+
+        foreach ($fields as $field) {
+            $grandTotals[$field] = $data->sum($field);
+        }
         /*
 |--------------------------------------------------------------------------
 | KELOMPOKKAN: KECAMATAN -> PETUGAS -> TANGGAL
@@ -761,6 +798,7 @@ class UsahaController extends Controller
             'progressTable' => $progressTable,
             'tanggalUploads' => $tanggalUploads,
             'dataGrouped' => $dataGrouped,
+            'grandTotals' => $grandTotals,
         ]);
     }
 }

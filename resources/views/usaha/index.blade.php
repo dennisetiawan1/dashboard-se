@@ -473,7 +473,7 @@
         {{-- TABEL 1 - PERKEMBANGAN DATA BERDASARKAN TANGGAL --}}
 
         <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        {{-- Header tabel --}}
+            {{-- Header tabel --}}
             <div class="px-5 py-4 border-b border-slate-100">
                 <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wide">
                     Perkembangan Data Usaha
@@ -492,8 +492,9 @@
                         <tr>
                             <th rowspan="2"
                                 class="sticky left-0 z-10 px-5 py-4 text-left
-                        text-[11px] uppercase tracking-wider text-slate-900
-                        whitespace-nowrap border-r border-slate-200 align-bottom">
+                                text-[11px] uppercase tracking-wider text-slate-900
+                                whitespace-nowrap border-r border-slate-200 align-bottom
+                                bg-white">
                                 Kecamatan / Petugas
                             </th>
 
@@ -501,7 +502,7 @@
                                 <th colspan="3"
                                     class="px-6 py-3 text-center text-[11px]
                             uppercase tracking-wider text-slate-900
-                            whitespace-nowrap border-l border-slate-200">
+                            whitespace-nowrap border-l-2 border-slate-200">
 
                                     {{ \Carbon\Carbon::parse($tanggal)->translatedFormat('d F Y') }}
 
@@ -516,32 +517,30 @@
                                 <th
                                     class="px-3 py-2 text-center text-[12px]
                             font-semibold uppercase tracking-wider
-                            text-slate-900 border-l border-slate-200
+                            text-slate-900 border-l-2 border-slate-200
                             whitespace-nowrap">
-                                    BKU
+                                    BKU Ditemukan dan Baru
                                 </th>
 
                                 <th
                                     class="px-3 py-2 text-center text-[12px]
                             font-semibold uppercase tracking-wider
                             text-slate-900 whitespace-nowrap">
-                                    Usaha Keluarga
+                                    Usaha dalam Keluarga<br> Ditemukan dan Baru
                                 </th>
 
                                 <th
                                     class="px-3 py-2 text-center text-[12px]
                             font-semibold uppercase tracking-wider
                             text-slate-900 whitespace-nowrap">
-                                    Keluarga
+                                    Keluarga Ditemukan dan Baru
                                 </th>
                             @endforeach
 
                         </tr>
 
                     </thead>
-
-                    {{--  BODY--}}
-
+                    {{--  BODY --}}
                     @forelse ($progressTable as $kecamatan => $group)
 
                         <tbody x-data="{ open: false }" class="divide-y divide-slate-100">
@@ -549,7 +548,7 @@
                             {{-- BARIS KECAMATAN --}}
 
                             <tr @click="open = !open" class="hover:bg-slate-50 cursor-pointer transition-colors">
-                                {{-- NAMA KECAMATAN--}}
+                                {{-- NAMA KECAMATAN --}}
                                 <td
                                     class="sticky left-0 z-10 bg-white px-5 py-4
                             font-semibold text-slate-700 whitespace-nowrap
@@ -1244,7 +1243,7 @@
 
                                 <td x-show="$store.usahaColumns.nama_sls" x-cloak
                                     class="px-5 py-3 font-semibold bg-slate-100">
-                                    
+
                                 </td>
 
                                 <td x-show="$store.usahaColumns.ub_prelist" x-cloak
@@ -1552,7 +1551,138 @@
                         </tbody>
 
                     @endforelse
+                    <tfoot>
+                        <tr class="bg-slate-200 border-t-2 border-slate-300">
 
+                            <td class="px-5 py-3 font-bold text-slate-700 whitespace-nowrap">
+                                TOTAL KESELURUHAN
+                            </td>
+
+                            <td x-show="$store.usahaColumns.id_wilayah" x-cloak class="px-5 py-3"></td>
+
+                            <td x-show="$store.usahaColumns.kd_kab" x-cloak class="px-5 py-3"></td>
+
+                            <td x-show="$store.usahaColumns.nama_sls" x-cloak class="px-5 py-3"></td>
+
+                            <td x-show="$store.usahaColumns.ub_prelist" x-cloak class="px-5 py-3 text-right font-bold">
+                                {{ number_format($grandTotals['jumlah_ub_prelist_awal'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.um_prelist" x-cloak class="px-5 py-3 text-right font-bold">
+                                {{ number_format($grandTotals['jumlah_um_prelist_awal'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.umk_prelist" x-cloak class="px-5 py-3 text-right font-bold">
+                                {{ number_format($grandTotals['jumlah_umk_prelist_awal'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.usaha_ditemukan_bku" x-cloak
+                                class="px-5 py-3 text-right font-bold text-emerald-600">
+                                {{ number_format($grandTotals['jumlah_usaha_ditemukan_bku'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.usaha_ditutup_bku" x-cloak
+                                class="px-5 py-3 text-right font-bold text-red-600">
+                                {{ number_format($grandTotals['jumlah_usaha_ditutup_bku'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.usaha_ganda_bku" x-cloak
+                                class="px-5 py-3 text-right font-bold text-amber-600">
+                                {{ number_format($grandTotals['jumlah_usaha_ganda_bku'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_bku" x-cloak
+                                class="px-5 py-3 text-right font-bold text-slate-600">
+                                {{ number_format($grandTotals['jumlah_usaha_tidak_ditemukan_bku'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.usaha_baru_bku" x-cloak
+                                class="px-5 py-3 text-right font-bold text-blue-600">
+                                {{ number_format($grandTotals['jumlah_usaha_baru_bku'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.usaha_ditemukan_keluarga" x-cloak
+                                class="px-5 py-3 text-right font-bold">
+                                {{ number_format($grandTotals['jumlah_usaha_ditemukan_usaha_keluarga'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.usaha_tutup_keluarga" x-cloak
+                                class="px-5 py-3 text-right font-bold">
+                                {{ number_format($grandTotals['jumlah_usaha_tutup_usaha_keluarga'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.usaha_ganda_keluarga" x-cloak
+                                class="px-5 py-3 text-right font-bold">
+                                {{ number_format($grandTotals['jumlah_usaha_ganda_usaha_keluarga'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_keluarga" x-cloak
+                                class="px-5 py-3 text-right font-bold">
+                                {{ number_format($grandTotals['jumlah_usaha_tidak_ditemukan_usaha_keluarga'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.usaha_baru_keluarga" x-cloak
+                                class="px-5 py-3 text-right font-bold">
+                                {{ number_format($grandTotals['jumlah_usaha_baru_usaha_keluarga'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.keluarga_ditemukan" x-cloak
+                                class="px-5 py-3 text-right font-bold text-emerald-600">
+                                {{ number_format($grandTotals['jumlah_keluarga_ditemukan'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.keluarga_meninggal" x-cloak
+                                class="px-5 py-3 text-right font-bold text-red-600">
+                                {{ number_format($grandTotals['jumlah_keluarga_meninggal'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.keluarga_tidak_eligible" x-cloak
+                                class="px-5 py-3 text-right font-bold text-amber-600">
+                                {{ number_format($grandTotals['jumlah_keluarga_tidak_eligible'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.keluarga_tidak_ditemui" x-cloak
+                                class="px-5 py-3 text-right font-bold text-orange-600">
+                                {{ number_format($grandTotals['jumlah_keluarga_tidak_ditemui'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.keluarga_tidak_ditemukan" x-cloak
+                                class="px-5 py-3 text-right font-bold text-slate-600">
+                                {{ number_format($grandTotals['jumlah_keluarga_tidak_ditemukan'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.keluarga_baru" x-cloak
+                                class="px-5 py-3 text-right font-bold text-blue-600">
+                                {{ number_format($grandTotals['jumlah_keluarga_baru'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.prelist_usaha" x-cloak class="px-5 py-3 text-right font-bold">
+                                {{ number_format($grandTotals['jumlah_prelist_usaha'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.usaha_realisasi" x-cloak
+                                class="px-5 py-3 text-right font-bold text-sky-600">
+                                {{ number_format($grandTotals['jumlah_usaha_realisasi'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.prelist_keluarga" x-cloak
+                                class="px-5 py-3 text-right font-bold">
+                                {{ number_format($grandTotals['jumlah_prelist_keluarga'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.keluarga_realisasi" x-cloak
+                                class="px-5 py-3 text-right font-bold text-emerald-600">
+                                {{ number_format($grandTotals['jumlah_keluarga_realisasi'] ?? 0) }}
+                            </td>
+
+                            <td x-show="$store.usahaColumns.ppl" x-cloak class="px-5 py-3"></td>
+
+                            <td x-show="$store.usahaColumns.pml" x-cloak class="px-5 py-3"></td>
+
+                            <td x-show="$store.usahaColumns.last_update" x-cloak class="px-5 py-3"></td>
+
+                        </tr>
+                    </tfoot>
                 </table>
 
             </div>
