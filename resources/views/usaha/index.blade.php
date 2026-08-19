@@ -896,9 +896,47 @@
                             </tr>
 
                         </tbody>
-
                     @endforelse
+                    <tfoot>
+                        <tr class="bg-slate-100 border-t-2 border-slate-300">
 
+                            <td class="sticky left-0 z-10 bg-slate-100 px-5 py-4 font-bold text-slate-900 whitespace-nowrap border-r border-slate-200">
+                                TOTAL SEMUA KECAMATAN
+                            </td>
+
+                            @foreach ($tanggalUploads as $tanggal)
+
+                                @php
+                                    $tanggalKey = \Carbon\Carbon::parse($tanggal)->format('Y-m-d');
+                                    $total = $progressGrandTotals[$tanggalKey] ?? [
+                                        'bku' => 0,
+                                        'usaha_keluarga' => 0,
+                                        'keluarga' => 0,
+                                    ];
+                                @endphp
+
+                                <td class="px-3 py-4 text-center whitespace-nowrap border-l border-slate-200">
+                                    <div class="font-bold text-slate-900">
+                                        {{ number_format($total['bku']) }}
+                                    </div>
+                                </td>
+
+                                <td class="px-3 py-4 text-center whitespace-nowrap">
+                                    <div class="font-bold text-slate-900">
+                                        {{ number_format($total['usaha_keluarga']) }}
+                                    </div>
+                                </td>
+
+                                <td class="px-3 py-4 text-center whitespace-nowrap">
+                                    <div class="font-bold text-slate-900">
+                                        {{ number_format($total['keluarga']) }}
+                                    </div>
+                                </td>
+
+                            @endforeach
+
+                        </tr>
+                    </tfoot>
                 </table>
 
             </div>

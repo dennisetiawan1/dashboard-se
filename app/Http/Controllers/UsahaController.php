@@ -618,6 +618,27 @@ class UsahaController extends Controller
 
         ksort($progressTable);
 
+        $progressGrandTotals = [];
+
+        foreach ($tanggalUploads as $tanggal) {
+            $tanggalKey = \Carbon\Carbon::parse($tanggal)->format('Y-m-d');
+
+            $progressGrandTotals[$tanggalKey] = [
+                'bku' => 0,
+                'usaha_keluarga' => 0,
+                'keluarga' => 0,
+            ];
+
+            foreach ($progressTable as $group) {
+                $item = $group['totals'][$tanggalKey] ?? null;
+
+                if ($item) {
+                    $progressGrandTotals[$tanggalKey]['bku'] += $item['bku'];
+                    $progressGrandTotals[$tanggalKey]['usaha_keluarga'] += $item['usaha_keluarga'];
+                    $progressGrandTotals[$tanggalKey]['keluarga'] += $item['keluarga'];
+                }
+            }
+        }
         // | HITUNG PERSENTASE PERKEMBANGAN
         // | Dibandingkan dengan tanggal upload sebelumnya
 
@@ -799,6 +820,7 @@ class UsahaController extends Controller
             'tanggalUploads' => $tanggalUploads,
             'dataGrouped' => $dataGrouped,
             'grandTotals' => $grandTotals,
+            'progressGrandTotals' => $progressGrandTotals,
         ]);
     }
 }
