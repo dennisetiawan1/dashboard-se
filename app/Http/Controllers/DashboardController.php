@@ -46,6 +46,8 @@ if (!$availableDates->contains($selectedDate)) {
             'sls_code' => $request->input('sls_code'),
             'nama_kecamatan' => $request->input('nama_kecamatan'),
         ];
+        // Role default untuk hitung total (kalau user belum pilih filter role)
+        $roleForTotals = $filters['petugas_role'] ?: 'pencacah';
 
         $referenceMap = PetugasReference::query()
             ->get(['petugas_username', 'nama_petugas', 'kode_kecamatan', 'nama_kecamatan'])
@@ -110,7 +112,7 @@ if ($request->filled('tanggal')) {
 }
 
 if ($filters['petugas_role']) {
-    $baseQuery->where('petugas_role', $filters['petugas_role']);
+    $baseQuery->where('petugas_role', $roleForTotals);
 }
 
 $this->applyFilters($baseQuery, $filters);
@@ -270,9 +272,7 @@ if ($selectedIndex === false) {
 }
 
 $trendQuery = AssignmentSnapshot::query()
-    ->when($filters['petugas_role'], function ($q, $role) {
-        $q->where('petugas_role', $role);
-    })
+    ->where('petugas_role', $roleForTotals)
     ->selectRaw('
         upload_date,
         COALESCE(SUM(sls_total_assignment),0) as total,
@@ -307,6 +307,7 @@ if ($previousDate) {
 
     $prevQueryDirect = AssignmentSnapshot::query()
         ->whereDate('upload_date', $previousDate)
+        ->where('petugas_role', $roleForTotals)
         ->selectRaw('
         COALESCE(SUM(sls_total_assignment),0) as total,
         COALESCE(SUM(status_open),0) as open,
@@ -406,7 +407,8 @@ foreach ($availableDatesForTrend as $date) {
        // Mapping kecamatan -> daftar SLS code
         $kecamatanSlsMap = \App\Models\AssignmentSnapshot::query()
             ->whereNotNull('sls_code')
-            ->whereNotNull('petugas_username');
+            ->whereNotNull('petugas_username')
+            ->where('petugas_role', $roleForTotals);
 
         if ($request->filled('tanggal')) {
             // Jika user memilih tanggal
