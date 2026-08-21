@@ -167,7 +167,7 @@ $this->applyFilters($baseQuery, $filters);
         $row->total_assignment - $row->status_open;
 
     $row->pct_non_open = $row->total_assignment > 0
-        ? round(($row->status_non_open / $row->total_assignment) * 100)
+        ? round(($row->status_non_open / $row->total_assignment) * 100, 2)
         : 0;
 
     // % Selain Non Open & Draft = (Assignment - Open - Draft) / Assignment
@@ -177,7 +177,7 @@ $this->applyFilters($baseQuery, $filters);
         - $row->status_draft;
 
     $row->pct_submitted = $row->total_assignment > 0
-        ? round(($row->status_non_open_draft / $row->total_assignment) * 100)
+        ? round(($row->status_non_open_draft / $row->total_assignment) * 100, 2)
         : 0;
 
     // % Approved = (Assignment - Open - Draft - Submitted) / Assignment
@@ -188,7 +188,7 @@ $this->applyFilters($baseQuery, $filters);
         - $row->status_submitted_pencacah;
 
     $row->pct_approved = $row->total_assignment > 0
-        ? round(($row->status_approved_progress / $row->total_assignment) * 100)
+        ? round(($row->status_approved_progress / $row->total_assignment) * 100, 2)
         : 0;
 
     $ref = $referenceMap->get($row->petugas_username);
@@ -488,12 +488,12 @@ foreach ($availableDatesForTrend as $date) {
 
     // % Non Open = (Assignment - Open) / Assignment × 100
     'pct_non_open' => $total > 0
-        ? round((($total - $open) / $total) * 100)
+        ? round((($total - $open) / $total) * 100, 2)
         : 0,
 
     // % Selain Non Open & Draft = (Assignment - Open - Draft) / Assignment × 100
     'pct_submitted' => $total > 0
-        ? round((($total - $open - $draft) / $total) * 100)
+        ? round((($total - $open - $draft) / $total) * 100, 2)
         : 0,
 
     'pct_submitted_pencacah' => $total > 0
@@ -502,7 +502,7 @@ foreach ($availableDatesForTrend as $date) {
 
     // % Approved = (Assignment - Open - Draft - Submitted) / Assignment × 100
     'pct_approved' => $total > 0
-        ? round((($total - $open - $draft - $submitted) / $total) * 100)
+        ? round((($total - $open - $draft - $submitted) / $total) * 100, 2)
         : 0,
 
     'pct_rejected' => $total > 0

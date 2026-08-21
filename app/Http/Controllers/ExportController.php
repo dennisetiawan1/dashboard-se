@@ -10,6 +10,8 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use App\Models\Usaha;
+use App\Models\UsahaUpload;
 
 class ExportController extends Controller
 {
@@ -34,7 +36,7 @@ class ExportController extends Controller
         $selectedDate = $request->input('tanggal');
 
         $query = AssignmentSnapshot::query()
-               ->selectRaw('
+            ->selectRaw('
                 upload_date,
                 petugas_username,
                 MAX(kabupaten_code) as kabupaten_code,
@@ -65,9 +67,9 @@ class ExportController extends Controller
         }
 
         $query
-            ->when($filters['petugas_username'], fn ($q, $v) => $q->where('petugas_username', $v))
-            ->when($filters['petugas_role'], fn ($q, $v) => $q->where('petugas_role', $v))
-            ->when($filters['sls_code'], fn ($q, $v) => $q->where('sls_code', 'like', '%'.$v.'%'))
+            ->when($filters['petugas_username'], fn($q, $v) => $q->where('petugas_username', $v))
+            ->when($filters['petugas_role'], fn($q, $v) => $q->where('petugas_role', $v))
+            ->when($filters['sls_code'], fn($q, $v) => $q->where('sls_code', 'like', '%' . $v . '%'))
             ->when($filters['nama_kecamatan'], function ($q) use ($filters) {
                 $q->whereIn('petugas_username', $filters['_usernames_in_kecamatan'] ?? []);
             });
@@ -146,18 +148,19 @@ class ExportController extends Controller
 
         $filenameBase = $prefix . '-progress-assignment-' . $filenameLabel;
 
-return $this->exportXlsx(
-    $exportRows,
-    $filenameBase,
-    $scope,
-    $selectedDate,
-    $filters
-);
+        return $this->exportXlsx(
+            $exportRows,
+            $filenameBase,
+            $scope,
+            $selectedDate,
+            $filters
+        );
     }
+
 
     private function exportXlsx($rows, string $filenameBase, string $scope, ?string $selectedDate = null, array $filters = [])
     {
-        $filename = $filenameBase.'.xlsx';
+        $filename = $filenameBase . '.xlsx';
 
         $spreadsheet = new Spreadsheet();
 
@@ -172,7 +175,7 @@ return $this->exportXlsx(
             $this->addSummaryPerTanggalSheet($spreadsheet, $rows);
         }
 
-        $tempPath = storage_path('app/'.uniqid('export_').'.xlsx');
+        $tempPath = storage_path('app/' . uniqid('export_') . '.xlsx');
         $writer = new Xlsx($spreadsheet);
         $writer->save($tempPath);
 
@@ -197,7 +200,7 @@ return $this->exportXlsx(
                 'kecamatan' => $first['kecamatan'],
                 'byDate' => $group->keyBy('tanggal_raw'),
             ];
-        })->sortBy(fn ($p) => $p['nama'] !== '-' ? $p['nama'] : $p['username'])->values();
+        })->sortBy(fn($p) => $p['nama'] !== '-' ? $p['nama'] : $p['username'])->values();
 
         $sheet = $spreadsheet->createSheet();
         $sheet->setTitle('Rekap per Petugas');
@@ -221,12 +224,12 @@ return $this->exportXlsx(
             $startColLetter = $this->colLetter($col);
             $endColLetter = $this->colLetter($col + 2);
 
-            $sheet->setCellValue($startColLetter.'1', $label);
+            $sheet->setCellValue($startColLetter . '1', $label);
             $sheet->mergeCells("{$startColLetter}1:{$endColLetter}1");
 
-            $sheet->setCellValue($this->colLetter($col).'2', 'Total');
-            $sheet->setCellValue($this->colLetter($col + 1).'2', 'Approved');
-            $sheet->setCellValue($this->colLetter($col + 2).'2', 'Progress %');
+            $sheet->setCellValue($this->colLetter($col) . '2', 'Total');
+            $sheet->setCellValue($this->colLetter($col + 1) . '2', 'Approved');
+            $sheet->setCellValue($this->colLetter($col + 2) . '2', 'Progress %');
 
             $dateColMap[$date] = $col;
             $col += 3;
@@ -240,15 +243,15 @@ return $this->exportXlsx(
 
         $rowIndex = 3;
         foreach ($petugas as $p) {
-            $sheet->setCellValue('A'.$rowIndex, $p['username']);
-            $sheet->setCellValue('B'.$rowIndex, $p['nama']);
-            $sheet->setCellValue('C'.$rowIndex, $p['kecamatan']);
+            $sheet->setCellValue('A' . $rowIndex, $p['username']);
+            $sheet->setCellValue('B' . $rowIndex, $p['nama']);
+            $sheet->setCellValue('C' . $rowIndex, $p['kecamatan']);
 
             foreach ($dateColMap as $date => $startCol) {
                 $entry = $p['byDate']->get($date);
-                $sheet->setCellValue($this->colLetter($startCol).$rowIndex, $entry['total_assignment'] ?? '');
-                $sheet->setCellValue($this->colLetter($startCol + 1).$rowIndex, $entry['approved'] ?? '');
-                $sheet->setCellValue($this->colLetter($startCol + 2).$rowIndex, $entry['progress'] ?? '');
+                $sheet->setCellValue($this->colLetter($startCol) . $rowIndex, $entry['total_assignment'] ?? '');
+                $sheet->setCellValue($this->colLetter($startCol + 1) . $rowIndex, $entry['approved'] ?? '');
+                $sheet->setCellValue($this->colLetter($startCol + 2) . $rowIndex, $entry['progress'] ?? '');
             }
 
             $rowIndex++;
@@ -258,7 +261,7 @@ return $this->exportXlsx(
             $sheet->getColumnDimension($c)->setAutoSize(true);
         }
 
-        $sheet->setAutoFilter('A2:'.$lastCol.($rowIndex - 1));
+        $sheet->setAutoFilter('A2:' . $lastCol . ($rowIndex - 1));
         $sheet->freezePane('D3');
     }
 
@@ -289,8 +292,13 @@ return $this->exportXlsx(
         $rowIndex = 2;
         foreach ($byDate as $agg) {
             $sheet->fromArray([
-                $agg['tanggal'], $agg['total'], $agg['open'], $agg['draft'], $agg['submitted'], $agg['approved'],
-            ], null, 'A'.$rowIndex);
+                $agg['tanggal'],
+                $agg['total'],
+                $agg['open'],
+                $agg['draft'],
+                $agg['submitted'],
+                $agg['approved'],
+            ], null, 'A' . $rowIndex);
             $rowIndex++;
         }
 
@@ -312,8 +320,8 @@ return $this->exportXlsx(
         $query = AssignmentSnapshot::query()
             ->where('upload_date', $selectedDate)
             ->when($filters['petugas_role'] ?? null, function ($q, $v) {
-        $q->where('petugas_role', $v);
-    })
+                $q->where('petugas_role', $v);
+            })
             ->selectRaw('
                 petugas_username,
                 MAX(kabupaten_code) as kabupaten_code,
@@ -334,8 +342,8 @@ return $this->exportXlsx(
                 SUM(status_revoked_admin_kab) as status_revoked_admin_kab
             ')
             ->groupBy('petugas_username')
-            ->when($filters['petugas_username'] ?? null, fn ($q, $v) => $q->where('petugas_username', $v))
-            ->when($filters['sls_code'] ?? null, fn ($q, $v) => $q->where('sls_code', 'like', '%'.$v.'%'))
+            ->when($filters['petugas_username'] ?? null, fn($q, $v) => $q->where('petugas_username', $v))
+            ->when($filters['sls_code'] ?? null, fn($q, $v) => $q->where('sls_code', 'like', '%' . $v . '%'))
             ->when($filters['nama_kecamatan'] ?? null, function ($q) use ($filters) {
                 $q->whereIn('petugas_username', $filters['_usernames_in_kecamatan'] ?? []);
             });
@@ -361,7 +369,7 @@ return $this->exportXlsx(
             $ref = $referenceMap->get($row->petugas_username);
 
             return $ref->kode_kecamatan ?? 'ZZZ_TANPA_KECAMATAN';
-        })->sortBy(fn ($group, $kode) => $kode)->values();
+        })->sortBy(fn($group, $kode) => $kode)->values();
 
         $sheet = $useActiveSheet ? $spreadsheet->getActiveSheet() : $spreadsheet->createSheet();
         $sheet->setTitle('Rekap Kecamatan');
@@ -406,7 +414,7 @@ return $this->exportXlsx(
             $kodeSingkat = $kodeKecamatan === 'ZZZ_TANPA_KECAMATAN'
                 ? '???'
                 : substr($kodeKecamatan, -3);
-            $labelKecamatan = '['.$kodeSingkat.'] '.mb_strtoupper($namaKecamatan ?? 'TANPA KECAMATAN');
+            $labelKecamatan = '[' . $kodeSingkat . '] ' . mb_strtoupper($namaKecamatan ?? 'TANPA KECAMATAN');
 
             // Urutkan petugas dalam kecamatan secara alfabetis berdasarkan nama (fallback username)
             $petugasSorted = $petugasInGroup->sortBy(function ($row) use ($referenceMap) {
@@ -429,7 +437,7 @@ return $this->exportXlsx(
             $kecRejectedAdmin = (int) $petugasSorted->sum('status_rejected_admin_kab');
             $kecRevokedAdmin = (int) $petugasSorted->sum('status_revoked_admin_kab');
 
-           $this->writeKecamatanRecapRow(
+            $this->writeKecamatanRecapRow(
                 $sheet,
                 $rowIndex,
                 $labelKecamatan,
@@ -472,7 +480,7 @@ return $this->exportXlsx(
                     (int) $p->status_rejected_admin_kab,
                     (int) $p->status_revoked_admin_kab,
                     false
-                    );
+                );
                 $rowIndex++;
             }
 
@@ -492,7 +500,7 @@ return $this->exportXlsx(
         }
 
         // Baris grand total (kabupaten/kota)
-        $labelGrand = '['.($kabupatenCode ?? '-').'] '.mb_strtoupper($kabupatenName ?? 'TOTAL');
+        $labelGrand = '[' . ($kabupatenCode ?? '-') . '] ' . mb_strtoupper($kabupatenName ?? 'TOTAL');
         $this->writeKecamatanRecapRow(
             $sheet,
             $rowIndex,
@@ -518,28 +526,28 @@ return $this->exportXlsx(
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
-        $sheet->setAutoFilter('A1:L'.$lastDataRow);
+        $sheet->setAutoFilter('A1:L' . $lastDataRow);
         $sheet->freezePane('A2');
     }
-        private function writeKecamatanRecapRow(
-            $sheet,
-            int $row,
-            string $label,
-            int $assignment,
-            int $open,
-            int $draft,
-            int $submit,
-            int $approve,
-            int $reject,
-            int $editedPengawas,
-            int $revokedPengawas,
-            int $submittedRespondent,
-            int $completedAdmin,
-            int $editedAdmin,
-            int $rejectedAdmin,
-            int $revokedAdmin,
-            bool $bold
-        ): void {
+    private function writeKecamatanRecapRow(
+        $sheet,
+        int $row,
+        string $label,
+        int $assignment,
+        int $open,
+        int $draft,
+        int $submit,
+        int $approve,
+        int $reject,
+        int $editedPengawas,
+        int $revokedPengawas,
+        int $submittedRespondent,
+        int $completedAdmin,
+        int $editedAdmin,
+        int $rejectedAdmin,
+        int $revokedAdmin,
+        bool $bold
+    ): void {
         $sheet->setCellValue("A{$row}", $label);
         $sheet->setCellValue("B{$row}", $assignment);
         $sheet->setCellValue("C{$row}", $open);
@@ -568,10 +576,603 @@ return $this->exportXlsx(
         $letter = '';
         while ($colNumber > 0) {
             $mod = ($colNumber - 1) % 26;
-            $letter = chr(65 + $mod).$letter;
+            $letter = chr(65 + $mod) . $letter;
             $colNumber = intdiv($colNumber - $mod, 26);
         }
 
         return $letter;
+    }
+    public function exportUsaha()
+    {
+        $data = Usaha::query()
+            ->get()
+            ->groupBy(function ($row) {
+                return implode('|', [
+                    $row->id_wilayah,
+                    $row->kd_kab,
+                    $row->nama_sls,
+                    $row->ppl,
+                    $row->pml,
+                ]);
+            })
+            ->map(function ($rows) {
+
+                $row = clone $rows->first();
+
+                $fields = [
+                    'jumlah_ub_prelist_awal',
+                    'jumlah_um_prelist_awal',
+                    'jumlah_umk_prelist_awal',
+
+                    'jumlah_usaha_ditemukan_bku',
+                    'jumlah_usaha_ditutup_bku',
+                    'jumlah_usaha_ganda_bku',
+                    'jumlah_usaha_tidak_ditemukan_bku',
+                    'jumlah_usaha_baru_bku',
+
+                    'jumlah_usaha_ditemukan_usaha_keluarga',
+                    'jumlah_usaha_tutup_usaha_keluarga',
+                    'jumlah_usaha_ganda_usaha_keluarga',
+                    'jumlah_usaha_tidak_ditemukan_usaha_keluarga',
+                    'jumlah_usaha_baru_usaha_keluarga',
+
+                    'jumlah_keluarga_ditemukan',
+                    'jumlah_keluarga_meninggal',
+                    'jumlah_keluarga_tidak_eligible',
+                    'jumlah_keluarga_tidak_ditemui',
+                    'jumlah_keluarga_tidak_ditemukan',
+                    'jumlah_keluarga_baru',
+
+                    'jumlah_prelist_usaha',
+                    'jumlah_usaha_realisasi',
+                    'jumlah_prelist_keluarga',
+                    'jumlah_keluarga_realisasi',
+                ];
+
+                foreach ($fields as $field) {
+                    $row->{$field} = $rows->sum($field);
+                }
+
+                return $row;
+            })
+            ->sortBy('nama_sls')
+            ->values();
+
+        $spreadsheet = new Spreadsheet();
+
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Data Usaha');
+
+        $headers = [
+            'No',
+            'ID Wilayah',
+            'Kode Kabupaten',
+            'Kecamatan',
+            'Nama SLS',
+            'Petugas',
+            'Email Petugas',
+            'PPL',
+            'PML',
+
+            'UB Prelist Awal',
+            'UM Prelist Awal',
+            'UMK Prelist Awal',
+
+            'Usaha Ditemukan BKU',
+            'Usaha Ditutup BKU',
+            'Usaha Ganda BKU',
+            'Usaha Tidak Ditemukan BKU',
+            'Usaha Baru BKU',
+
+            'Usaha Ditemukan Usaha Keluarga',
+            'Usaha Tutup Usaha Keluarga',
+            'Usaha Ganda Usaha Keluarga',
+            'Usaha Tidak Ditemukan Usaha Keluarga',
+            'Usaha Baru Usaha Keluarga',
+
+            'Keluarga Ditemukan',
+            'Keluarga Meninggal',
+            'Keluarga Tidak Eligible',
+            'Keluarga Tidak Ditemui',
+            'Keluarga Tidak Ditemukan',
+            'Keluarga Baru',
+
+            'Prelist Usaha',
+            'Usaha Realisasi',
+            'Prelist Keluarga',
+            'Keluarga Realisasi',
+        ];
+
+        foreach ($headers as $column => $header) {
+            $cell = $this->colLetter($column + 1) . '1';
+            $sheet->setCellValue($cell, $header);
+        }
+
+        $rowNumber = 2;
+
+        foreach ($data as $index => $row) {
+
+            $values = [
+                $index + 1,
+                $row->id_wilayah,
+                $row->kd_kab,
+                $row->nama_kecamatan,
+                $row->nama_sls,
+
+                // Tidak ada tabel pegawai
+                '',
+                '',
+
+                $row->ppl,
+                $row->pml,
+
+                $row->jumlah_ub_prelist_awal,
+                $row->jumlah_um_prelist_awal,
+                $row->jumlah_umk_prelist_awal,
+
+                $row->jumlah_usaha_ditemukan_bku,
+                $row->jumlah_usaha_ditutup_bku,
+                $row->jumlah_usaha_ganda_bku,
+                $row->jumlah_usaha_tidak_ditemukan_bku,
+                $row->jumlah_usaha_baru_bku,
+
+                $row->jumlah_usaha_ditemukan_usaha_keluarga,
+                $row->jumlah_usaha_tutup_usaha_keluarga,
+                $row->jumlah_usaha_ganda_usaha_keluarga,
+                $row->jumlah_usaha_tidak_ditemukan_usaha_keluarga,
+                $row->jumlah_usaha_baru_usaha_keluarga,
+
+                $row->jumlah_keluarga_ditemukan,
+                $row->jumlah_keluarga_meninggal,
+                $row->jumlah_keluarga_tidak_eligible,
+                $row->jumlah_keluarga_tidak_ditemui,
+                $row->jumlah_keluarga_tidak_ditemukan,
+                $row->jumlah_keluarga_baru,
+
+                $row->jumlah_prelist_usaha,
+                $row->jumlah_usaha_realisasi,
+                $row->jumlah_prelist_keluarga,
+                $row->jumlah_keluarga_realisasi,
+            ];
+
+            foreach ($values as $column => $value) {
+                $cell = $this->colLetter($column + 1) . $rowNumber;
+                $sheet->setCellValue($cell, $value ?? '');
+            }
+
+            $rowNumber++;
+        }
+
+        $lastColumn = $sheet->getHighestColumn();
+
+        $sheet->getStyle("A1:{$lastColumn}1")
+            ->getFont()
+            ->setBold(true);
+
+        for ($column = 1; $column <= count($headers); $column++) {
+            $sheet->getColumnDimensionByColumn($column)->setAutoSize(true);
+        }
+
+        $sheet->freezePane('A2');
+        $sheet->setAutoFilter("A1:{$lastColumn}" . ($rowNumber - 1));
+
+        $filename = 'data-usaha-' . now()->format('Y-m-d-His') . '.xlsx';
+
+        $tempPath = storage_path(
+            'app/' . uniqid('export_usaha_') . '.xlsx'
+        );
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($tempPath);
+
+        return response()
+            ->download($tempPath, $filename)
+            ->deleteFileAfterSend(true);
+    }
+
+    public function exportUsahaGrouped(Request $request)
+    {
+        $referenceMap = PetugasReference::query()
+            ->get([
+                'petugas_username',
+                'nama_petugas',
+                'kode_kecamatan',
+                'nama_kecamatan',
+            ])
+            ->keyBy('petugas_username');
+
+        $latestUpload = UsahaUpload::query()
+            ->orderByDesc('upload_date')
+            ->orderByDesc('id')
+            ->first();
+
+        $query = Usaha::query();
+
+        if ($latestUpload) {
+            $query->where('upload_id', $latestUpload->id);
+        }
+
+        if ($request->filled('kd_kab')) {
+            $query->where('kd_kab', $request->kd_kab);
+        }
+
+        if ($request->filled('nama_sls')) {
+            $query->where('nama_sls', $request->nama_sls);
+        }
+
+        if ($request->filled('ppl')) {
+            $query->where('ppl', $request->ppl);
+        }
+
+        if ($request->filled('pml')) {
+            $query->where('pml', $request->pml);
+        }
+
+        $fields = [
+            'jumlah_ub_prelist_awal',
+            'jumlah_um_prelist_awal',
+            'jumlah_umk_prelist_awal',
+
+            'jumlah_usaha_ditemukan_bku',
+            'jumlah_usaha_ditutup_bku',
+            'jumlah_usaha_ganda_bku',
+            'jumlah_usaha_tidak_ditemukan_bku',
+            'jumlah_usaha_baru_bku',
+
+            'jumlah_usaha_ditemukan_usaha_keluarga',
+            'jumlah_usaha_tutup_usaha_keluarga',
+            'jumlah_usaha_ganda_usaha_keluarga',
+            'jumlah_usaha_tidak_ditemukan_usaha_keluarga',
+            'jumlah_usaha_baru_usaha_keluarga',
+
+            'jumlah_keluarga_ditemukan',
+            'jumlah_keluarga_meninggal',
+            'jumlah_keluarga_tidak_eligible',
+            'jumlah_keluarga_tidak_ditemui',
+            'jumlah_keluarga_tidak_ditemukan',
+            'jumlah_keluarga_baru',
+
+            'jumlah_prelist_usaha',
+            'jumlah_usaha_realisasi',
+            'jumlah_prelist_keluarga',
+            'jumlah_keluarga_realisasi',
+        ];
+
+        $data = $query
+            ->get()
+            ->groupBy(function ($row) {
+                return implode('|', [
+                    $row->id_wilayah,
+                    $row->kd_kab,
+                    $row->nama_sls,
+                    $row->ppl,
+                    $row->pml,
+                ]);
+            })
+            ->map(function ($rows) use ($referenceMap, $fields) {
+
+                $row = clone $rows->first();
+
+                foreach ($fields as $field) {
+                    $row->{$field} = $rows->sum($field);
+                }
+
+                $ref = $referenceMap->get($row->ppl);
+
+                $row->nama_petugas = $ref->nama_petugas ?? null;
+                $row->email_petugas = $ref->petugas_username ?? null;
+                $row->kode_kecamatan = $ref->kode_kecamatan ?? null;
+                $row->nama_kecamatan = $ref->nama_kecamatan ?? null;
+
+                return $row;
+            })
+            ->sortBy('nama_sls')
+            ->values();
+
+        $dataGrouped = $data
+            ->groupBy(function ($row) {
+                return $row->nama_kecamatan ?: 'Tanpa Kecamatan';
+            })
+            ->map(function ($rowsByKecamatan) use ($fields) {
+
+                $totals = [];
+
+                foreach ($fields as $field) {
+                    $totals[$field] = $rowsByKecamatan->sum($field);
+                }
+
+                $petugas = $rowsByKecamatan
+                    ->groupBy(function ($row) {
+                        return $row->nama_petugas
+                            ?: ($row->ppl ?: 'Tanpa Petugas');
+                    })
+                    ->map(function ($rowsByPetugas) use ($fields) {
+
+                        $petugasTotals = [];
+
+                        foreach ($fields as $field) {
+                            $petugasTotals[$field] = $rowsByPetugas->sum($field);
+                        }
+
+                        return [
+                            'rows' => $rowsByPetugas,
+                            'totals' => $petugasTotals,
+                        ];
+                    });
+
+                return [
+                    'totals' => $totals,
+                    'petugas' => $petugas,
+                ];
+            })
+            ->sortKeys();
+
+        $grandTotals = [];
+
+        foreach ($fields as $field) {
+            $grandTotals[$field] = $data->sum($field);
+        }
+
+        $spreadsheet = new Spreadsheet();
+
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Data Usaha');
+
+        $headers = [
+            '#',
+            'ID Wilayah',
+            'Kode Kabupaten',
+            'Nama SLS',
+
+            'UB Prelist Awal',
+            'UM Prelist Awal',
+            'UMK Prelist Awal',
+
+            'Usaha Ditemukan (BKU)',
+            'Usaha Ditutup (BKU)',
+            'Usaha Ganda (BKU)',
+            'Usaha Tidak Ditemukan (BKU)',
+            'Usaha Baru (BKU)',
+
+            'Usaha Ditemukan (Usaha Keluarga)',
+            'Usaha Tutup (Usaha Keluarga)',
+            'Usaha Ganda (Usaha Keluarga)',
+            'Usaha Tidak Ditemukan (Usaha Keluarga)',
+            'Usaha Baru (Usaha Keluarga)',
+
+            'Keluarga Ditemukan',
+            'Keluarga Meninggal',
+            'Keluarga Tidak Eligible',
+            'Keluarga Tidak Dapat Ditemui',
+            'Keluarga Tidak Ditemukan',
+            'Keluarga Baru',
+
+            'Jumlah Prelist Usaha',
+            'Jumlah Usaha Realisasi',
+            'Jumlah Prelist Keluarga',
+            'Jumlah Keluarga Realisasi',
+
+            'PPL',
+            'PML',
+            'Last Update',
+        ];
+
+        foreach ($headers as $index => $header) {
+            $column = $this->colLetter($index + 1);
+            $sheet->setCellValue($column . '1', $header);
+        }
+
+        $lastCol = $this->colLetter(count($headers));
+
+        $sheet->getStyle("A1:{$lastCol}1")
+            ->getFont()
+            ->setBold(true)
+            ->getColor()
+            ->setRGB('FFFFFF');
+
+        $sheet->getStyle("A1:{$lastCol}1")
+            ->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()
+            ->setRGB('0D9488');
+
+        $sheet->getStyle("A1:{$lastCol}1")
+            ->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+            ->setVertical(Alignment::VERTICAL_CENTER);
+
+        $rowIndex = 2;
+
+        $dataRowStart = $rowIndex;
+
+        foreach ($dataGrouped as $namaKecamatan => $kecamatan) {
+
+            $kecamatanRows = $kecamatan['petugas']->flatMap(function ($petugas) {
+                return $petugas['rows'];
+            });
+
+            $firstRow = $kecamatanRows->first();
+
+            $sheet->setCellValue("A{$rowIndex}", $namaKecamatan);
+            $sheet->setCellValue(
+                "B{$rowIndex}",
+                $firstRow->id_wilayah ?? ''
+            );
+            $sheet->setCellValue(
+                "C{$rowIndex}",
+                $firstRow->kd_kab ?? ''
+            );
+
+            $col = 5;
+
+            foreach ($fields as $field) {
+                $sheet->setCellValue(
+                    $this->colLetter($col) . $rowIndex,
+                    $kecamatan['totals'][$field] ?? 0
+                );
+
+                $col++;
+            }
+
+            $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")
+                ->getFill()
+                ->setFillType(Fill::FILL_SOLID)
+                ->getStartColor()
+                ->setRGB('E2E8F0');
+
+            $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")
+                ->getFont()
+                ->setBold(true);
+
+            $rowIndex++;
+
+            foreach ($kecamatan['petugas'] as $namaPetugas => $petugas) {
+
+                $petugasRows = $petugas['rows'];
+
+                $firstPetugasRow = $petugasRows->first();
+
+                $sheet->setCellValue(
+                    "A{$rowIndex}",
+                    $namaPetugas
+                );
+
+                $sheet->setCellValue(
+                    "B{$rowIndex}",
+                    $firstPetugasRow->ppl ?? ''
+                );
+
+                $col = 5;
+
+                foreach ($fields as $field) {
+                    $sheet->setCellValue(
+                        $this->colLetter($col) . $rowIndex,
+                        $petugas['totals'][$field] ?? 0
+                    );
+
+                    $col++;
+                }
+
+                $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")
+                    ->getFill()
+                    ->setFillType(Fill::FILL_SOLID)
+                    ->getStartColor()
+                    ->setRGB('F1F5F9');
+
+                $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")
+                    ->getFont()
+                    ->setBold(true);
+
+                $rowIndex++;
+
+                foreach ($petugasRows->values() as $index => $row) {
+
+                    $sheet->setCellValue(
+                        "A{$rowIndex}",
+                        $index + 1
+                    );
+
+                    $sheet->setCellValue(
+                        "B{$rowIndex}",
+                        $row->id_wilayah ?? '-'
+                    );
+
+                    $sheet->setCellValue(
+                        "C{$rowIndex}",
+                        $row->kd_kab ?? '-'
+                    );
+
+                    $sheet->setCellValue(
+                        "D{$rowIndex}",
+                        $row->nama_sls ?? '-'
+                    );
+
+                    $col = 5;
+
+                    foreach ($fields as $field) {
+                        $sheet->setCellValue(
+                            $this->colLetter($col) . $rowIndex,
+                            $row->{$field} ?? 0
+                        );
+
+                        $col++;
+                    }
+
+                    $sheet->setCellValue(
+                        $this->colLetter(count($headers) - 2) . $rowIndex,
+                        $row->ppl ?? '-'
+                    );
+
+                    $sheet->setCellValue(
+                        $this->colLetter(count($headers) - 1) . $rowIndex,
+                        $row->pml ?? '-'
+                    );
+
+                    $sheet->setCellValue(
+                        $this->colLetter(count($headers)) . $rowIndex,
+                        $row->last_update ?? '-'
+                    );
+
+                    $rowIndex++;
+                }
+            }
+        }
+
+        $sheet->setCellValue(
+            "A{$rowIndex}",
+            'TOTAL KESELURUHAN'
+        );
+
+        $col = 5;
+
+        foreach ($fields as $field) {
+            $sheet->setCellValue(
+                $this->colLetter($col) . $rowIndex,
+                $grandTotals[$field] ?? 0
+            );
+
+            $col++;
+        }
+
+        $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")
+            ->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()
+            ->setRGB('CBD5E1');
+
+        $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")
+            ->getFont()
+            ->setBold(true);
+
+        $lastDataRow = $rowIndex;
+
+        for ($i = 1; $i <= count($headers); $i++) {
+            $sheet
+                ->getColumnDimension($this->colLetter($i))
+                ->setAutoSize(true);
+        }
+
+        $sheet->getStyle("A1:{$lastCol}{$lastDataRow}")
+            ->getAlignment()
+            ->setVertical(Alignment::VERTICAL_CENTER);
+
+        $sheet->getStyle("E2:{$lastCol}{$lastDataRow}")
+            ->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+
+        $sheet->freezePane('A2');
+
+        $filename = 'data-usaha-' . now()->format('Y-m-d-His') . '.xlsx';
+
+        $tempPath = storage_path(
+            'app/' . uniqid('export_usaha_') . '.xlsx'
+        );
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($tempPath);
+
+        return response()
+            ->download($tempPath, $filename)
+            ->deleteFileAfterSend(true);
     }
 }

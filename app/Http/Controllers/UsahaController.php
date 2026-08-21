@@ -103,12 +103,6 @@ class UsahaController extends Controller
 
                 $row = clone $rows->first();
 
-                /*
-        |--------------------------------------------------------------------------
-        | AKUMULASI PRELIST AWAL
-        |--------------------------------------------------------------------------
-        */
-
                 $row->jumlah_ub_prelist_awal =
                     $rows->sum('jumlah_ub_prelist_awal');
 
@@ -117,13 +111,6 @@ class UsahaController extends Controller
 
                 $row->jumlah_umk_prelist_awal =
                     $rows->sum('jumlah_umk_prelist_awal');
-
-
-                /*
-        |--------------------------------------------------------------------------
-        | AKUMULASI USAHA BKU
-        |--------------------------------------------------------------------------
-        */
 
                 $row->jumlah_usaha_ditemukan_bku =
                     $rows->sum('jumlah_usaha_ditemukan_bku');
@@ -140,13 +127,6 @@ class UsahaController extends Controller
                 $row->jumlah_usaha_baru_bku =
                     $rows->sum('jumlah_usaha_baru_bku');
 
-
-                /*
-        |--------------------------------------------------------------------------
-        | AKUMULASI USAHA KELUARGA
-        |--------------------------------------------------------------------------
-        */
-
                 $row->jumlah_usaha_ditemukan_usaha_keluarga =
                     $rows->sum('jumlah_usaha_ditemukan_usaha_keluarga');
 
@@ -162,12 +142,6 @@ class UsahaController extends Controller
                 $row->jumlah_usaha_baru_usaha_keluarga =
                     $rows->sum('jumlah_usaha_baru_usaha_keluarga');
 
-
-                /*
-        |--------------------------------------------------------------------------
-        | AKUMULASI KELUARGA
-        |--------------------------------------------------------------------------
-        */
 
                 $row->jumlah_keluarga_ditemukan =
                     $rows->sum('jumlah_keluarga_ditemukan');
@@ -187,13 +161,6 @@ class UsahaController extends Controller
                 $row->jumlah_keluarga_baru =
                     $rows->sum('jumlah_keluarga_baru');
 
-
-                /*
-        |--------------------------------------------------------------------------
-        | AKUMULASI TOTAL
-        |--------------------------------------------------------------------------
-        */
-
                 $row->jumlah_prelist_usaha =
                     $rows->sum('jumlah_prelist_usaha');
 
@@ -205,13 +172,6 @@ class UsahaController extends Controller
 
                 $row->jumlah_keluarga_realisasi =
                     $rows->sum('jumlah_keluarga_realisasi');
-
-
-                /*
-        |--------------------------------------------------------------------------
-        | REFERENCE PETUGAS
-        |--------------------------------------------------------------------------
-        */
 
                 $ref = $referenceMap->get($row->ppl);
 
@@ -346,14 +306,6 @@ class UsahaController extends Controller
 
         $percentageSummary = [
 
-            /*
-    |--------------------------------------------------------------------------
-    | 1. BKU
-    | BKU Ditemukan + BKU Baru
-    | dibandingkan dengan Prelist Usaha
-    |--------------------------------------------------------------------------
-    */
-
             'bku' => [
                 'value' => $summary['prelist_usaha'] > 0
                     ? (
@@ -373,15 +325,6 @@ class UsahaController extends Controller
                 $summary['prelist_usaha'],
             ],
 
-
-            /*
-    |--------------------------------------------------------------------------
-    | 2. USAHA KELUARGA
-    | Usaha Keluarga Ditemukan + Usaha Keluarga Baru
-    | dibandingkan dengan Prelist Keluarga
-    |--------------------------------------------------------------------------
-    */
-
             'usaha_keluarga' => [
                 'value' => $summary['prelist_keluarga'] > 0
                     ? (
@@ -400,16 +343,6 @@ class UsahaController extends Controller
                 'denominator' =>
                 $summary['prelist_keluarga'],
             ],
-
-
-            /*
-    |--------------------------------------------------------------------------
-    | 3. TOTAL USAHA
-    | BKU Ditemukan + BKU Baru
-    | + Usaha Keluarga Ditemukan + Usaha Keluarga Baru
-    | dibandingkan dengan Prelist Keluarga
-    |--------------------------------------------------------------------------
-    */
 
             'total_usaha' => [
                 'value' => $summary['prelist_keluarga'] > 0

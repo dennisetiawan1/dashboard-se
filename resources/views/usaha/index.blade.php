@@ -900,12 +900,12 @@
                     <tfoot>
                         <tr class="bg-slate-100 border-t-2 border-slate-300">
 
-                            <td class="sticky left-0 z-10 bg-slate-100 px-5 py-4 font-bold text-slate-900 whitespace-nowrap border-r border-slate-200">
+                            <td
+                                class="sticky left-0 z-10 bg-slate-100 px-5 py-4 font-bold text-slate-900 whitespace-nowrap border-r border-slate-200">
                                 TOTAL SEMUA KECAMATAN
                             </td>
 
                             @foreach ($tanggalUploads as $tanggal)
-
                                 @php
                                     $tanggalKey = \Carbon\Carbon::parse($tanggal)->format('Y-m-d');
                                     $total = $progressGrandTotals[$tanggalKey] ?? [
@@ -932,7 +932,6 @@
                                         {{ number_format($total['keluarga']) }}
                                     </div>
                                 </td>
-
                             @endforeach
 
                         </tr>
@@ -947,18 +946,39 @@
 
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
-            <div x-data="{ showFilter: false }">
+            <div x-data="{ showFilter: false }" :class="showFilter ? 'ring-1 ring-sky-200' : ''" class="transition">
 
                 <button @click="showFilter = !showFilter; if (showFilter) $store.usahaColumns.initDraft()"
                     class="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-slate-50 transition">
-                    <div>
-                        <h3 class="text-sm font-semibold text-slate-700">
-                            Tampilkan / Sembunyikan Kolom
-                        </h3>
-                        <p class="text-xs text-slate-400 mt-0.5">
-                            <span x-text="$store.usahaColumns.visibleCount()"></span> dari
-                            <span x-text="$store.usahaColumns.keys().length"></span> kolom aktif
-                        </p>
+
+                    <div class="flex items-center gap-3">
+
+                        <span class="flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 text-sky-600 shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 4h18M6 8h12M10 12h4M11 16h2" />
+                            </svg>
+                        </span>
+
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h3 class="text-sm font-semibold text-slate-700">
+                                    Filter Kolom
+                                </h3>
+
+                                <span x-show="$store.usahaColumns.visibleCount() < $store.usahaColumns.keys().length"
+                                    x-cloak
+                                    class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">
+                                    Aktif
+                                </span>
+                            </div>
+
+                            <p class="text-xs text-slate-400 mt-0.5">
+                                <span x-text="$store.usahaColumns.visibleCount()"></span> dari
+                                <span x-text="$store.usahaColumns.keys().length"></span> kolom aktif
+                            </p>
+                        </div>
+
                     </div>
 
                     <span x-text="showFilter ? '▾' : '▸'" class="text-slate-400 text-lg"></span>
@@ -1164,6 +1184,63 @@
                     </div>
 
                 </div>
+
+            </div>
+
+        </div>
+        
+        {{-- ================= EXPORT DATA USAHA ================= --}}
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+
+            <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
+
+                <div>
+                    <h3 class="text-lg font-semibold text-slate-800">
+                        Export Data Usaha
+                    </h3>
+
+                    <p class="text-sm text-slate-500 mt-1">
+                        Export seluruh data usaha ke dalam file Excel.
+                    </p>
+                </div>
+
+                <form method="GET"
+                    action="{{ route('export.usaha.grouped') }}"
+                    class="flex flex-wrap gap-4 items-end">
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                            Data
+                        </label>
+
+                        <input
+                            type="text"
+                            value="Seluruh Data Usaha"
+                            readonly
+                            class="rounded-xl border border-slate-300 bg-gray-100 px-3 py-2.5 text-sm text-slate-500 w-56 cursor-not-allowed">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                            Format
+                        </label>
+
+                        <input
+                            type="text"
+                            value="Excel"
+                            readonly
+                            class="rounded-xl border border-slate-300 bg-gray-100 px-3 py-2.5 text-sm text-slate-400 w-36 cursor-not-allowed">
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6 h-11 text-sm font-semibold shadow-sm hover:shadow transition">
+
+                        Export
+
+                    </button>
+
+                </form>
 
             </div>
 

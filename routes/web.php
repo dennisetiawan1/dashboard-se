@@ -9,6 +9,7 @@ use App\Http\Controllers\ReferenceUploadController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UsahaController;
 use App\Http\Controllers\UsahaImportController;
+use App\Http\Controllers\UsahaExportController;
 use App\Models\UsahaUpload;
 
 // Login
@@ -25,6 +26,11 @@ Route::middleware('auth.dashboard')->group(function () {
 
     Route::post('/usaha/import', [UsahaImportController::class, 'store'])
         ->name('usaha.import.store');
+        
+    Route::get('/export/usaha', [ExportController::class, 'exportUsaha'])
+        ->name('export.usaha');
+    Route::get('/export/usaha-grouped', [ExportController::class, 'exportUsahaGrouped'])
+        ->name('export.usaha.grouped');
     Route::get('/export', [ExportController::class, 'index'])->name('export');
 });
 

@@ -306,66 +306,66 @@
 
     <div class="space-y-6">
 
-       {{-- ================= KPI HIGHLIGHT ================= --}}
-<div class="grid md:grid-cols-3 gap-5">
+            {{-- ================= KPI HIGHLIGHT ================= --}}
+        <div class="grid md:grid-cols-3 gap-5">
 
-    {{-- ================= NON OPEN ================= --}}
-    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-600 p-6 shadow-md">
-        <div class="absolute -right-12 -bottom-12 w-44 h-44 rounded-full bg-white/10"></div>
-        <div class="absolute right-8 top-8 w-20 h-20 rounded-full border border-white/10"></div>
-        <div class="relative z-10">
-            <p class="text-sky-100 text-xs font-semibold uppercase tracking-widest">% Non Open</p>
-            <div class="mt-2 text-5xl font-extrabold text-white">{{ $summary['pct_non_open'] }}%</div>
-        </div>
-        <div class="relative z-10 mt-5 border-t border-white/20 pt-4">
-            <p class="text-sm text-sky-100 leading-relaxed">
-                <strong class="text-white">{{ number_format($summary['non_open']) }}</strong>
-                dari
-                <strong class="text-white">{{ number_format($summary['total']) }}</strong>
-                assignment telah keluar dari status <strong class="text-white">Open</strong>.
-            </p>
-        </div>
-    </div>
+            {{-- ================= NON OPEN ================= --}}
+            <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-600 p-6 shadow-md">
+                <div class="absolute -right-12 -bottom-12 w-44 h-44 rounded-full bg-white/10"></div>
+                <div class="absolute right-8 top-8 w-20 h-20 rounded-full border border-white/10"></div>
+                <div class="relative z-10">
+                    <p class="text-sky-100 text-xs font-semibold uppercase tracking-widest">% Non Open</p>
+                    <div class="mt-2 text-5xl font-extrabold text-white">{{ $summary['pct_non_open'] }}%</div>
+                </div>
+                <div class="relative z-10 mt-5 border-t border-white/20 pt-4">
+                    <p class="text-sm text-sky-100 leading-relaxed">
+                        <strong class="text-white">{{ number_format($summary['non_open']) }}</strong>
+                        dari
+                        <strong class="text-white">{{ number_format($summary['total']) }}</strong>
+                        assignment telah keluar dari status <strong class="text-white">Open</strong>.
+                    </p>
+                </div>
+            </div>
 
-    {{-- ================= SELAIN OPEN & DRAFT ================= --}}
-    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-teal-500 to-cyan-700 p-6 shadow-md">
-        <div class="absolute -right-12 -bottom-12 w-44 h-44 rounded-full bg-white/10"></div>
-        <div class="absolute right-8 top-8 w-20 h-20 rounded-full border border-white/10"></div>
-        <div class="relative z-10">
-            <p class="text-teal-100 text-xs font-semibold uppercase tracking-widest">% Selain Open & Draft</p>
-            <div class="mt-2 text-5xl font-extrabold text-white">{{ $summary['pct_submitted'] }}%</div>
-        </div>
-        <div class="relative z-10 mt-5 border-t border-white/20 pt-4">
-            <p class="text-sm text-teal-100 leading-relaxed">
-                <strong class="text-white">{{ number_format($summary['non_open_draft']) }}</strong>
-                assignment telah mencapai status
-                <strong class="text-white">Submitted</strong>,
-                <strong class="text-white">Approved</strong>
-                atau
-                <strong class="text-white">Rejected</strong>.
-            </p>
-        </div>
-    </div>
+            {{-- ================= SELAIN OPEN & DRAFT ================= --}}
+            <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-teal-500 to-cyan-700 p-6 shadow-md">
+                <div class="absolute -right-12 -bottom-12 w-44 h-44 rounded-full bg-white/10"></div>
+                <div class="absolute right-8 top-8 w-20 h-20 rounded-full border border-white/10"></div>
+                <div class="relative z-10">
+                    <p class="text-teal-100 text-xs font-semibold uppercase tracking-widest">% Selain Open & Draft</p>
+                    <div class="mt-2 text-5xl font-extrabold text-white">{{ $summary['pct_submitted'] }}%</div>
+                </div>
+                <div class="relative z-10 mt-5 border-t border-white/20 pt-4">
+                    <p class="text-sm text-teal-100 leading-relaxed">
+                        <strong class="text-white">{{ number_format($summary['non_open_draft']) }}</strong>
+                        assignment telah mencapai status
+                        <strong class="text-white">Submitted</strong>,
+                        <strong class="text-white">Approved</strong>
+                        atau
+                        <strong class="text-white">Rejected</strong>.
+                    </p>
+                </div>
+            </div>
 
-    {{-- ================= APPROVED ================= --}}
-    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 to-green-700 p-6 shadow-md">
-        <div class="absolute -right-12 -bottom-12 w-44 h-44 rounded-full bg-white/10"></div>
-        <div class="absolute right-8 top-8 w-20 h-20 rounded-full border border-white/10"></div>
-        <div class="relative z-10">
-            <p class="text-emerald-100 text-xs font-semibold uppercase tracking-widest">% Approved</p>
-            <div class="mt-2 text-5xl font-extrabold text-white">{{ $summary['pct_approved'] }}%</div>
-        </div>
-        <div class="relative z-10 mt-5 border-t border-white/20 pt-4">
-            <p class="text-sm text-emerald-100 leading-relaxed">
-                <strong class="text-white">{{ number_format($summary['approved']) }}</strong>
-                dari
-                <strong class="text-white">{{ number_format($summary['total']) }}</strong>
-                assignment telah mencapai status <strong class="text-white">Approved</strong>.
-            </p>
-        </div>
-    </div>
+            {{-- ================= APPROVED ================= --}}
+            <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 to-green-700 p-6 shadow-md">
+                <div class="absolute -right-12 -bottom-12 w-44 h-44 rounded-full bg-white/10"></div>
+                <div class="absolute right-8 top-8 w-20 h-20 rounded-full border border-white/10"></div>
+                <div class="relative z-10">
+                    <p class="text-emerald-100 text-xs font-semibold uppercase tracking-widest">% Approved</p>
+                    <div class="mt-2 text-5xl font-extrabold text-white">{{ $summary['pct_approved'] }}%</div>
+                </div>
+                <div class="relative z-10 mt-5 border-t border-white/20 pt-4">
+                    <p class="text-sm text-emerald-100 leading-relaxed">
+                        <strong class="text-white">{{ number_format($summary['approved']) }}</strong>
+                        dari
+                        <strong class="text-white">{{ number_format($summary['total']) }}</strong>
+                        assignment telah mencapai status <strong class="text-white">Approved</strong>.
+                    </p>
+                </div>
+            </div>
 
-</div>
+        </div>
 
         {{-- ================= KPI CARDS ================= --}}
         <div>
