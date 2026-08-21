@@ -941,8 +941,65 @@
             </div>
 
         </div>
+        
+        {{-- ================= EXPORT DATA USAHA ================= --}}
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
 
-        {{-- FILTER KOLOM TABEL USAHA --}}
+            <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
+
+                <div>
+                    <h3 class="text-lg font-semibold text-slate-800">
+                        Export Data Usaha
+                    </h3>
+
+                    <p class="text-sm text-slate-500 mt-1">
+                        Export seluruh data usaha ke dalam file Excel.
+                    </p>
+                </div>
+
+                <form method="GET"
+                    action="{{ route('export.usaha.grouped') }}"
+                    class="flex flex-wrap gap-4 items-end">
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                            Data
+                        </label>
+
+                        <input
+                            type="text"
+                            value="Seluruh Data Usaha"
+                            readonly
+                            class="rounded-xl border border-slate-300 bg-gray-100 px-3 py-2.5 text-sm text-slate-500 w-56 cursor-not-allowed">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                            Format
+                        </label>
+
+                        <input
+                            type="text"
+                            value="Excel"
+                            readonly
+                            class="rounded-xl border border-slate-300 bg-gray-100 px-3 py-2.5 text-sm text-slate-400 w-36 cursor-not-allowed">
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6 h-11 text-sm font-semibold shadow-sm hover:shadow transition">
+
+                        Export
+
+                    </button>
+
+                </form>
+
+            </div>
+
+        </div>
+
+                {{-- FILTER KOLOM TABEL USAHA --}}
 
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
@@ -1184,63 +1241,6 @@
                     </div>
 
                 </div>
-
-            </div>
-
-        </div>
-        
-        {{-- ================= EXPORT DATA USAHA ================= --}}
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-
-            <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
-
-                <div>
-                    <h3 class="text-lg font-semibold text-slate-800">
-                        Export Data Usaha
-                    </h3>
-
-                    <p class="text-sm text-slate-500 mt-1">
-                        Export seluruh data usaha ke dalam file Excel.
-                    </p>
-                </div>
-
-                <form method="GET"
-                    action="{{ route('export.usaha.grouped') }}"
-                    class="flex flex-wrap gap-4 items-end">
-
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                            Data
-                        </label>
-
-                        <input
-                            type="text"
-                            value="Seluruh Data Usaha"
-                            readonly
-                            class="rounded-xl border border-slate-300 bg-gray-100 px-3 py-2.5 text-sm text-slate-500 w-56 cursor-not-allowed">
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                            Format
-                        </label>
-
-                        <input
-                            type="text"
-                            value="Excel"
-                            readonly
-                            class="rounded-xl border border-slate-300 bg-gray-100 px-3 py-2.5 text-sm text-slate-400 w-36 cursor-not-allowed">
-                    </div>
-
-                    <button
-                        type="submit"
-                        class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6 h-11 text-sm font-semibold shadow-sm hover:shadow transition">
-
-                        Export
-
-                    </button>
-
-                </form>
 
             </div>
 
