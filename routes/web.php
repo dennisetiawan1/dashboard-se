@@ -9,8 +9,6 @@ use App\Http\Controllers\ReferenceUploadController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UsahaController;
 use App\Http\Controllers\UsahaImportController;
-use App\Http\Controllers\UsahaExportController;
-use App\Models\UsahaUpload;
 
 // Login
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
