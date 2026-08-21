@@ -710,6 +710,27 @@ class UsahaController extends Controller
             'keluarga_tidak_ditemui' => $grandTotals['jumlah_keluarga_tidak_ditemui'] - $previousSums['jumlah_keluarga_tidak_ditemui'],
             'keluarga_tidak_ditemukan' => $grandTotals['jumlah_keluarga_tidak_ditemukan'] - $previousSums['jumlah_keluarga_tidak_ditemukan'],
             'keluarga_baru' => $grandTotals['jumlah_keluarga_baru'] - $previousSums['jumlah_keluarga_baru'],
+            
+        ];
+
+        // ----- Hitung persentase versi upload sebelumnya (untuk delta) -----
+        $prevBkuNumerator = $previousSums['jumlah_usaha_ditemukan_bku'] + $previousSums['jumlah_usaha_baru_bku'];
+        $prevBkuDenominator = $previousSums['jumlah_prelist_usaha'];
+        $prevBkuValue = $prevBkuDenominator > 0 ? ($prevBkuNumerator / $prevBkuDenominator) * 100 : 0;
+
+        $prevUsahaKeluargaNumerator = $previousSums['jumlah_usaha_ditemukan_usaha_keluarga'] + $previousSums['jumlah_usaha_baru_usaha_keluarga'];
+        $prevUsahaKeluargaDenominator = $previousSums['jumlah_prelist_keluarga'];
+        $prevUsahaKeluargaValue = $prevUsahaKeluargaDenominator > 0 ? ($prevUsahaKeluargaNumerator / $prevUsahaKeluargaDenominator) * 100 : 0;
+
+        $prevTotalUsahaNumerator = $previousSums['jumlah_usaha_ditemukan_bku'] + $previousSums['jumlah_usaha_baru_bku']
+            + $previousSums['jumlah_usaha_ditemukan_usaha_keluarga'] + $previousSums['jumlah_usaha_baru_usaha_keluarga'];
+        $prevTotalUsahaDenominator = $previousSums['jumlah_prelist_keluarga'];
+        $prevTotalUsahaValue = $prevTotalUsahaDenominator > 0 ? ($prevTotalUsahaNumerator / $prevTotalUsahaDenominator) * 100 : 0;
+
+        $percentageComparison = [
+            'bku' => $percentageSummary['bku']['value'] - $prevBkuValue,
+            'usaha_keluarga' => $percentageSummary['usaha_keluarga']['value'] - $prevUsahaKeluargaValue,
+            'total_usaha' => $percentageSummary['total_usaha']['value'] - $prevTotalUsahaValue,
         ];
 
         return view('usaha.index', [
@@ -728,6 +749,7 @@ class UsahaController extends Controller
             'grandTotals' => $grandTotals,
             'progressGrandTotals' => $progressGrandTotals,
             'summaryComparison' => $summaryComparison,
+            'percentageComparison' => $percentageComparison,
         ]);
     }
     private function sumUsahaFieldsForUpload(?int $uploadId, array $fields): array

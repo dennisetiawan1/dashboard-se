@@ -104,116 +104,135 @@
 
      {{-- KPI PERSENTASE --}}
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
 
-            <div
-                class="relative overflow-hidden rounded-2xl
-                bg-gradient-to-r from-sky-500 to-cyan-600
-                p-6 shadow-md">
+        {{-- ================= PERSENTASE BKU ================= --}}
+        <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-600 p-6 shadow-md">
+            <div class="absolute -right-12 -bottom-12 w-44 h-44 rounded-full bg-white/10"></div>
+            <div class="absolute right-8 top-8 w-20 h-20 rounded-full border border-white/10"></div>
 
-                <div class="absolute -right-12 -bottom-12
-                    w-44 h-44 rounded-full bg-white/10">
-                </div>
+            <div class="relative z-10">
 
-                <div class="relative z-10">
-
-                    <p class="text-sky-100 text-xs font-semibold
-                      uppercase tracking-widest">
+                <div class="flex items-center justify-between">
+                    <p class="text-sky-100 text-xs font-semibold uppercase tracking-widest">
                         Persentase BKU
                     </p>
 
-                    <div class="mt-2 text-4xl font-extrabold text-white">
-                        {{ number_format($percentageSummary['bku']['value'], 2) }}%
+                    @php $delta = $percentageComparison['bku'] ?? 0; @endphp
+                    <div class="flex items-center gap-1 pl-2 pr-2.5 py-1 rounded-full bg-white shadow-sm
+                        {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                            @if ($delta > 0)
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
+                            @elseif ($delta < 0)
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                            @else
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14" />
+                            @endif
+                        </svg>
+                        <span class="text-xs font-bold">{{ number_format(abs($delta), 2) }}%</span>
                     </div>
+                </div>
 
-                    {{-- <p class="mt-3 text-sm text-sky-100">
-                        BKU ditemukan + BKU baru dari jumlah prelist usaha.
-                    </p> --}}
+                <div class="mt-3 text-4xl font-extrabold text-white leading-none">
+                    {{ number_format($percentageSummary['bku']['value'], 2) }}%
+                </div>
 
-                    <div class="mt-2 text-sm font-semibold text-white">
-                        {{ number_format($percentageSummary['bku']['numerator']) }}
-                        BKU ditemukan dan baru dari
-                        {{ number_format($percentageSummary['bku']['denominator']) }}
-                        prelist usaha
-                    </div>
-
+                <div class="mt-5 pt-4 border-t border-white/20 text-sm text-sky-100">
+                    <strong class="text-white">{{ number_format($percentageSummary['bku']['numerator']) }}</strong>
+                    BKU ditemukan &amp; baru dari
+                    <strong class="text-white">{{ number_format($percentageSummary['bku']['denominator']) }}</strong>
+                    prelist usaha
                 </div>
 
             </div>
+        </div>
 
-            <div
-                class="relative overflow-hidden rounded-2xl
-                bg-gradient-to-r from-emerald-500 to-green-700
-                p-6 shadow-md">
+        {{-- ================= PERSENTASE USAHA KELUARGA ================= --}}
+        <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 to-green-700 p-6 shadow-md">
+            <div class="absolute -right-12 -bottom-12 w-44 h-44 rounded-full bg-white/10"></div>
+            <div class="absolute right-8 top-8 w-20 h-20 rounded-full border border-white/10"></div>
 
-                <div class="absolute -right-12 -bottom-12
-                    w-44 h-44 rounded-full bg-white/10">
-                </div>
+            <div class="relative z-10">
 
-                <div class="relative z-10">
-
-                    <p class="text-emerald-100 text-xs font-semibold
-                      uppercase tracking-widest">
+                <div class="flex items-center justify-between">
+                    <p class="text-emerald-100 text-xs font-semibold uppercase tracking-widest">
                         Persentase Usaha Keluarga
                     </p>
 
-                    <div class="mt-2 text-4xl font-extrabold text-white">
-                        {{ number_format($percentageSummary['usaha_keluarga']['value'], 2) }}%
+                    @php $delta = $percentageComparison['usaha_keluarga'] ?? 0; @endphp
+                    <div class="flex items-center gap-1 pl-2 pr-2.5 py-1 rounded-full bg-white shadow-sm
+                        {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                            @if ($delta > 0)
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
+                            @elseif ($delta < 0)
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                            @else
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14" />
+                            @endif
+                        </svg>
+                        <span class="text-xs font-bold">{{ number_format(abs($delta), 2) }}%</span>
                     </div>
+                </div>
 
-                    {{-- <p class="mt-3 text-sm text-emerald-100">
-                        Usaha keluarga ditemukan + usaha keluarga baru
-                        dari jumlah prelist keluarga.
-                    </p> --}}
+                <div class="mt-3 text-4xl font-extrabold text-white leading-none">
+                    {{ number_format($percentageSummary['usaha_keluarga']['value'], 2) }}%
+                </div>
 
-                    <div class="mt-2 text-sm font-semibold text-white">
-                        {{ number_format($percentageSummary['usaha_keluarga']['numerator']) }}
-                        Usaha Keluarga ditemukan dan baru dari
-                        {{ number_format($percentageSummary['usaha_keluarga']['denominator']) }}
-                        prelist keluarga
-                    </div>
-
+                <div class="mt-5 pt-4 border-t border-white/20 text-sm text-emerald-100">
+                    <strong class="text-white">{{ number_format($percentageSummary['usaha_keluarga']['numerator']) }}</strong>
+                    Usaha Keluarga ditemukan &amp; baru dari
+                    <strong class="text-white">{{ number_format($percentageSummary['usaha_keluarga']['denominator']) }}</strong>
+                    prelist keluarga
                 </div>
 
             </div>
+        </div>
 
-            <div
-                class="relative overflow-hidden rounded-2xl
-                bg-gradient-to-r from-violet-500 to-purple-700
-                p-6 shadow-md">
+        {{-- ================= PERSENTASE TOTAL USAHA ================= --}}
+        <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-violet-500 to-purple-700 p-6 shadow-md">
+            <div class="absolute -right-12 -bottom-12 w-44 h-44 rounded-full bg-white/10"></div>
+            <div class="absolute right-8 top-8 w-20 h-20 rounded-full border border-white/10"></div>
 
-                <div class="absolute -right-12 -bottom-12
-                    w-44 h-44 rounded-full bg-white/10">
-                </div>
+            <div class="relative z-10">
 
-                <div class="relative z-10">
-
-                    <p class="text-violet-100 text-xs font-semibold
-                      uppercase tracking-widest">
+                <div class="flex items-center justify-between">
+                    <p class="text-violet-100 text-xs font-semibold uppercase tracking-widest">
                         Persentase Total Usaha
                     </p>
 
-                    <div class="mt-2 text-4xl font-extrabold text-white">
-                        {{ number_format($percentageSummary['total_usaha']['value'], 2) }}%
+                    @php $delta = $percentageComparison['total_usaha'] ?? 0; @endphp
+                    <div class="flex items-center gap-1 pl-2 pr-2.5 py-1 rounded-full bg-white shadow-sm
+                        {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                            @if ($delta > 0)
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
+                            @elseif ($delta < 0)
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                            @else
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14" />
+                            @endif
+                        </svg>
+                        <span class="text-xs font-bold">{{ number_format(abs($delta), 2) }}%</span>
                     </div>
+                </div>
 
-                    {{-- <p class="mt-3 text-sm text-violet-100">
-                        BKU + usaha keluarga ditemukan dan baru
-                        dari jumlah prelist keluarga.
-                    </p> --}}
+                <div class="mt-3 text-4xl font-extrabold text-white leading-none">
+                    {{ number_format($percentageSummary['total_usaha']['value'], 2) }}%
+                </div>
 
-                    <div class="mt-2 text-sm font-semibold text-white">
-                        {{ number_format($percentageSummary['total_usaha']['numerator']) }}
-                        BKU dan usaha keluarga dari
-                        {{ number_format($percentageSummary['total_usaha']['denominator']) }}
-                        prelist keluarga
-                    </div>
-
+                <div class="mt-5 pt-4 border-t border-white/20 text-sm text-violet-100">
+                    <strong class="text-white">{{ number_format($percentageSummary['total_usaha']['numerator']) }}</strong>
+                    BKU dan usaha keluarga dari
+                    <strong class="text-white">{{ number_format($percentageSummary['total_usaha']['denominator']) }}</strong>
+                    prelist keluarga
                 </div>
 
             </div>
-
         </div>
+
+    </div>
 
         <div>
             <div class="mb-4">
