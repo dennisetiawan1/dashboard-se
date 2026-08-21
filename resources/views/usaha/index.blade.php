@@ -102,15 +102,10 @@
             </p>
         </div>
 
-        {{-- =========================================================
-     KPI PERSENTASE
-========================================================== --}}
+     {{-- KPI PERSENTASE --}}
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
 
-            {{-- =====================================================
-         BKU
-    ====================================================== --}}
             <div
                 class="relative overflow-hidden rounded-2xl
                 bg-gradient-to-r from-sky-500 to-cyan-600
@@ -137,7 +132,7 @@
 
                     <div class="mt-2 text-sm font-semibold text-white">
                         {{ number_format($percentageSummary['bku']['numerator']) }}
-                        BKU dari
+                        BKU ditemukan dan baru dari
                         {{ number_format($percentageSummary['bku']['denominator']) }}
                         prelist usaha
                     </div>
@@ -146,10 +141,6 @@
 
             </div>
 
-
-            {{-- =====================================================
-         USAHA KELUARGA
-    ====================================================== --}}
             <div
                 class="relative overflow-hidden rounded-2xl
                 bg-gradient-to-r from-emerald-500 to-green-700
@@ -177,7 +168,7 @@
 
                     <div class="mt-2 text-sm font-semibold text-white">
                         {{ number_format($percentageSummary['usaha_keluarga']['numerator']) }}
-                        Usaha Keluarga dari
+                        Usaha Keluarga ditemukan dan baru dari
                         {{ number_format($percentageSummary['usaha_keluarga']['denominator']) }}
                         prelist keluarga
                     </div>
@@ -186,10 +177,6 @@
 
             </div>
 
-
-            {{-- =====================================================
-         TOTAL USAHA
-    ====================================================== --}}
             <div
                 class="relative overflow-hidden rounded-2xl
                 bg-gradient-to-r from-violet-500 to-purple-700
@@ -228,11 +215,7 @@
 
         </div>
 
-        {{-- =========================================================
-         STATUS USAHA BKU
-    ========================================================== --}}
         <div>
-
             <div class="mb-4">
 
                 <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide">
@@ -241,9 +224,7 @@
 
             </div>
 
-
             <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-5">
-
 
                 {{-- Ditemukan --}}
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
@@ -268,8 +249,12 @@
                         {{ number_format($summary['usaha_ditemukan_bku']) }}
                     </div>
 
-                </div>
+                    @php $delta = $summaryComparison['usaha_ditemukan_bku'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
+                    </div>
 
+                </div>
 
                 {{-- Ditutup --}}
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
@@ -291,6 +276,10 @@
 
                     <div class="mt-2 text-2xl font-bold text-slate-800">
                         {{ number_format($summary['usaha_ditutup_bku']) }}
+                    </div>
+                    @php $delta = $summaryComparison['usaha_ditutup_bku'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
                     </div>
 
                 </div>
@@ -317,9 +306,12 @@
                     <div class="mt-2 text-2xl font-bold text-slate-800">
                         {{ number_format($summary['usaha_ganda_bku']) }}
                     </div>
+                    @php $delta = $summaryComparison['usaha_ganda_bku'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
+                    </div>
 
                 </div>
-
 
                 {{-- Tidak Ditemukan --}}
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
@@ -342,9 +334,12 @@
                     <div class="mt-2 text-2xl font-bold text-slate-800">
                         {{ number_format($summary['usaha_tidak_ditemukan_bku']) }}
                     </div>
+                    @php $delta = $summaryComparison['usaha_tidak_ditemukan_bku'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
+                    </div>
 
                 </div>
-
 
                 {{-- Baru --}}
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
@@ -367,6 +362,10 @@
                     <div class="mt-2 text-2xl font-bold text-slate-800">
                         {{ number_format($summary['usaha_baru_bku']) }}
                     </div>
+                    @php $delta = $summaryComparison['usaha_baru_bku'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
+                    </div>
 
                 </div>
 
@@ -374,12 +373,163 @@
 
         </div>
 
-
-        {{-- =========================================================
-         STATUS KELUARGA
-    ========================================================== --}}
         <div>
+            <div class="mb-4">
 
+                <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide">
+                    Status Usaha Keluarga
+                </h2>
+
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-5">
+
+                {{-- Ditemukan --}}
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+
+                    <div class="w-11 h-11 rounded-xl bg-emerald-100 flex items-center justify-center mb-4">
+
+                        <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                            stroke-width="2">
+
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+
+                        </svg>
+
+                    </div>
+
+                    <div class="text-xs font-extrabold uppercase tracking-wide text-emerald-600">
+                        Ditemukan
+                    </div>
+
+                    <div class="mt-2 text-2xl font-bold text-slate-800">
+                        {{ number_format($summary['usaha_ditemukan_keluarga']) }}
+                    </div>
+                    @php $delta = $summaryComparison['usaha_ditemukan_keluarga'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
+                    </div>
+
+                </div>
+
+                {{-- Tutup --}}
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+
+                    <div class="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center mb-4">
+
+                        <svg class="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                            stroke-width="2">
+
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+
+                        </svg>
+
+                    </div>
+
+                    <div class="text-xs font-extrabold uppercase tracking-wide text-red-600">
+                        Tutup
+                    </div>
+
+                    <div class="mt-2 text-2xl font-bold text-slate-800">
+                        {{ number_format($summary['usaha_tutup_keluarga']) }}
+                    </div>
+                    @php $delta = $summaryComparison['usaha_tutup_keluarga'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
+                    </div>
+
+                </div>
+
+                {{-- Ganda --}}
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+
+                    <div class="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center mb-4">
+
+                        <svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                            stroke-width="2">
+
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h8m-8 4h8m-8 4h5" />
+
+                        </svg>
+
+                    </div>
+
+                    <div class="text-xs font-extrabold uppercase tracking-wide text-amber-600">
+                        Ganda
+                    </div>
+
+                    <div class="mt-2 text-2xl font-bold text-slate-800">
+                        {{ number_format($summary['usaha_ganda_keluarga']) }}
+                    </div>
+                    @php $delta = $summaryComparison['usaha_ganda_keluarga'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
+                    </div>
+
+                </div>
+
+                {{-- Tidak Ditemukan --}}
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+
+                    <div class="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center mb-4">
+
+                        <svg class="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                            stroke-width="2">
+
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M18 12H6" />
+
+                        </svg>
+
+                    </div>
+
+                    <div class="text-xs font-extrabold uppercase tracking-wide text-slate-600">
+                        Tidak Ditemukan
+                    </div>
+
+                    <div class="mt-2 text-2xl font-bold text-slate-800">
+                        {{ number_format($summary['usaha_tidak_ditemukan_keluarga']) }}
+                    </div>
+                    @php $delta = $summaryComparison['usaha_tidak_ditemukan_keluarga'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
+                    </div>
+
+                </div>
+
+                {{-- Baru --}}
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+
+                    <div class="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center mb-4">
+
+                        <svg class="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                            stroke-width="2">
+
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+
+                        </svg>
+
+                    </div>
+
+                    <div class="text-xs font-extrabold uppercase tracking-wide text-blue-600">
+                        Usaha Baru
+                    </div>
+
+                    <div class="mt-2 text-2xl font-bold text-slate-800">
+                        {{ number_format($summary['usaha_baru_keluarga']) }}
+                    </div>
+                    @php $delta = $summaryComparison['usaha_baru_keluarga'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div>
             <div class="mb-4">
 
                 <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide">
@@ -399,6 +549,10 @@
                     <div class="mt-2 text-2xl font-bold text-slate-800">
                         {{ number_format($summary['keluarga_ditemukan']) }}
                     </div>
+                    @php $delta = $summaryComparison['keluarga_ditemukan'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
+                    </div>
 
                 </div>
 
@@ -411,9 +565,12 @@
                     <div class="mt-2 text-2xl font-bold text-slate-800">
                         {{ number_format($summary['keluarga_meninggal']) }}
                     </div>
+                    @php $delta = $summaryComparison['keluarga_meninggal'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
+                    </div>
 
                 </div>
-
 
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
 
@@ -424,9 +581,12 @@
                     <div class="mt-2 text-2xl font-bold text-slate-800">
                         {{ number_format($summary['keluarga_tidak_eligible']) }}
                     </div>
+                    @php $delta = $summaryComparison['keluarga_tidak_eligible'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
+                    </div>
 
                 </div>
-
 
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
 
@@ -436,6 +596,10 @@
 
                     <div class="mt-2 text-2xl font-bold text-slate-800">
                         {{ number_format($summary['keluarga_tidak_ditemui']) }}
+                    </div>
+                    @php $delta = $summaryComparison['keluarga_tidak_ditemui'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
                     </div>
 
                 </div>
@@ -450,6 +614,10 @@
                     <div class="mt-2 text-2xl font-bold text-slate-800">
                         {{ number_format($summary['keluarga_tidak_ditemukan']) }}
                     </div>
+                    @php $delta = $summaryComparison['keluarga_tidak_ditemukan'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
+                    </div>
 
                 </div>
 
@@ -462,6 +630,10 @@
 
                     <div class="mt-2 text-2xl font-bold text-slate-800">
                         {{ number_format($summary['keluarga_baru']) }}
+                    </div>
+                    @php $delta = $summaryComparison['keluarga_baru'] ?? 0; @endphp
+                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
+                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
                     </div>
 
                 </div>

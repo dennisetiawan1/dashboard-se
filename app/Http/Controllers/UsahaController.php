@@ -12,11 +12,7 @@ class UsahaController extends Controller
 {
     public function index(Request $request)
     {
-        /*
-        |--------------------------------------------------------------------------
-        | REFERENCE PETUGAS
-        |--------------------------------------------------------------------------
-        */
+        //  REFERENCE PETUGAS
 
         $referenceMap = PetugasReference::query()
             ->get([
@@ -27,28 +23,14 @@ class UsahaController extends Controller
             ])
             ->keyBy('petugas_username');
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | AMBIL UPLOAD TERBARU
-        |--------------------------------------------------------------------------
-        |
-        | Dashboard hanya menampilkan data dari upload paling baru,
-        | bukan akumulasi seluruh histori upload.
-        |
-        */
+        //  AMBIL UPLOAD TERBARU
 
         $latestUpload = UsahaUpload::query()
             ->orderByDesc('upload_date')
             ->orderByDesc('id')
             ->first();
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | QUERY USAHA (HANYA UPLOAD TERBARU)
-        |--------------------------------------------------------------------------
-        */
+         // QUERY USAHA (HANYA UPLOAD TERBARU)
 
         $query = Usaha::query();
 
@@ -81,12 +63,7 @@ class UsahaController extends Controller
             $query->where('pml', $request->pml);
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | DATA USAHA
-        |--------------------------------------------------------------------------
-        */
+        //  DATA USAHA
 
         $data = $query
             ->get()
@@ -197,9 +174,7 @@ class UsahaController extends Controller
         /*        | SUMMARY AKUMULASI        | Karena $data mengambil seluruh record Usaha, maka sum() otomatis menjumlahkan semua upload.        */
 
         $summary = [
-            /*
-            | TOTAL USAHA & KELUARGA
-            */
+            /*  TOTAL USAHA & KELUARGA  */
 
             'prelist_usaha' =>
             $data->sum('jumlah_prelist_usaha'),
@@ -212,9 +187,7 @@ class UsahaController extends Controller
 
             'keluarga_realisasi' =>
             $data->sum('jumlah_keluarga_realisasi'),
-            /*
-            | BKU
-            */
+            /*  BKU  */
 
             'usaha_ditemukan_bku' =>
             $data->sum('jumlah_usaha_ditemukan_bku'),
@@ -368,12 +341,7 @@ class UsahaController extends Controller
             ],
 
         ];
-
-        /*
-|--------------------------------------------------------------------------
-| TABEL 1 - PERBANDINGAN BERDASARKAN TANGGAL UPLOAD
-|--------------------------------------------------------------------------
-*/
+        //  TABEL 1 - PERBANDINGAN BERDASARKAN TANGGAL UPLOAD
 
         $uploads = UsahaUpload::query()
             ->orderBy('upload_date')
@@ -390,11 +358,7 @@ class UsahaController extends Controller
             ->values()
             ->all();
 
-        /*
-|--------------------------------------------------------------------------
-| DATA TABEL PER KECAMATAN / PETUGAS
-|--------------------------------------------------------------------------
-*/
+        //  DATA TABEL PER KECAMATAN / PETUGAS
 
         $progressData = Usaha::query()
             ->join('usaha_uploads', 'usaha.upload_id', '=', 'usaha_uploads.id')
@@ -407,11 +371,8 @@ class UsahaController extends Controller
             )
             ->groupBy('usaha.ppl', 'usaha_uploads.upload_date')
             ->get();
-        /*
-    |--------------------------------------------------------------------------
-    | KELOMPOKKAN DATA USAHA: KECAMATAN -> PETUGAS
-    |--------------------------------------------------------------------------
-    */
+
+        //  KELOMPOKKAN DATA USAHA: KECAMATAN -> PETUGAS
 
         $dataGrouped = $data
             ->groupBy(function ($row) {
@@ -504,11 +465,7 @@ class UsahaController extends Controller
         foreach ($fields as $field) {
             $grandTotals[$field] = $data->sum($field);
         }
-        /*
-|--------------------------------------------------------------------------
-| KELOMPOKKAN: KECAMATAN -> PETUGAS -> TANGGAL
-|--------------------------------------------------------------------------
-*/
+        //  KELOMPOKKAN: KECAMATAN -> PETUGAS -> TANGGAL
 
         $progressTable = [];
 
@@ -685,29 +642,19 @@ class UsahaController extends Controller
 
             return $data;
         };
-        /*
-|--------------------------------------------------------------------------
-| TERAPKAN PERSENTASE KE TOTAL KECAMATAN
-|--------------------------------------------------------------------------
-*/
+
+        //  TERAPKAN PERSENTASE KE TOTAL KECAMATAN
+
         foreach ($progressTable as $namaKecamatan => &$kecamatanData) {
 
-            /*
-    |--------------------------------------------------------------------------
-    | TOTAL KECAMATAN
-    |--------------------------------------------------------------------------
-    */
+        // | TOTAL KECAMATAN
 
             $kecamatanData['totals'] = $hitungProgress(
                 $kecamatanData['totals']
             );
 
 
-            /*
-    |--------------------------------------------------------------------------
-    | PER PETUGAS
-    |--------------------------------------------------------------------------
-    */
+        //  PER PETUGAS
 
             foreach (
                 $kecamatanData['petugas']
@@ -723,11 +670,7 @@ class UsahaController extends Controller
         }
 
         unset($kecamatanData);
-        /*
-    |--------------------------------------------------------------------------
-    | UBAH JADI KUMULATIF (AKUMULASI SAMPAI TANGGAL TERSEBUT)
-    |--------------------------------------------------------------------------
-    */
+        //  UBAH JADI KUMULATIF (AKUMULASI SAMPAI TANGGAL TERSEBUT)
 
         $sortedTanggal = collect($tanggalUploads)
             ->map(fn($t) => \Carbon\Carbon::parse($t)->format('Y-m-d'))
@@ -738,6 +681,36 @@ class UsahaController extends Controller
             ->slice(-3)
             ->values()
             ->all();
+
+            // ----- Cari upload sebelumnya (untuk perbandingan naik/turun) -----
+        $previousUpload = UsahaUpload::query()
+            ->when($latestUpload, fn($q) => $q->where('id', '!=', $latestUpload->id))
+            ->orderByDesc('upload_date')
+            ->orderByDesc('id')
+            ->first();
+
+        $previousSums = $this->sumUsahaFieldsForUpload(optional($previousUpload)->id, $fields);
+
+        $summaryComparison = [
+            'usaha_ditemukan_bku' => $grandTotals['jumlah_usaha_ditemukan_bku'] - $previousSums['jumlah_usaha_ditemukan_bku'],
+            'usaha_ditutup_bku' => $grandTotals['jumlah_usaha_ditutup_bku'] - $previousSums['jumlah_usaha_ditutup_bku'],
+            'usaha_ganda_bku' => $grandTotals['jumlah_usaha_ganda_bku'] - $previousSums['jumlah_usaha_ganda_bku'],
+            'usaha_tidak_ditemukan_bku' => $grandTotals['jumlah_usaha_tidak_ditemukan_bku'] - $previousSums['jumlah_usaha_tidak_ditemukan_bku'],
+            'usaha_baru_bku' => $grandTotals['jumlah_usaha_baru_bku'] - $previousSums['jumlah_usaha_baru_bku'],
+
+            'usaha_ditemukan_keluarga' => $grandTotals['jumlah_usaha_ditemukan_usaha_keluarga'] - $previousSums['jumlah_usaha_ditemukan_usaha_keluarga'],
+            'usaha_tutup_keluarga' => $grandTotals['jumlah_usaha_tutup_usaha_keluarga'] - $previousSums['jumlah_usaha_tutup_usaha_keluarga'],
+            'usaha_ganda_keluarga' => $grandTotals['jumlah_usaha_ganda_usaha_keluarga'] - $previousSums['jumlah_usaha_ganda_usaha_keluarga'],
+            'usaha_tidak_ditemukan_keluarga' => $grandTotals['jumlah_usaha_tidak_ditemukan_usaha_keluarga'] - $previousSums['jumlah_usaha_tidak_ditemukan_usaha_keluarga'],
+            'usaha_baru_keluarga' => $grandTotals['jumlah_usaha_baru_usaha_keluarga'] - $previousSums['jumlah_usaha_baru_usaha_keluarga'],
+
+            'keluarga_ditemukan' => $grandTotals['jumlah_keluarga_ditemukan'] - $previousSums['jumlah_keluarga_ditemukan'],
+            'keluarga_meninggal' => $grandTotals['jumlah_keluarga_meninggal'] - $previousSums['jumlah_keluarga_meninggal'],
+            'keluarga_tidak_eligible' => $grandTotals['jumlah_keluarga_tidak_eligible'] - $previousSums['jumlah_keluarga_tidak_eligible'],
+            'keluarga_tidak_ditemui' => $grandTotals['jumlah_keluarga_tidak_ditemui'] - $previousSums['jumlah_keluarga_tidak_ditemui'],
+            'keluarga_tidak_ditemukan' => $grandTotals['jumlah_keluarga_tidak_ditemukan'] - $previousSums['jumlah_keluarga_tidak_ditemukan'],
+            'keluarga_baru' => $grandTotals['jumlah_keluarga_baru'] - $previousSums['jumlah_keluarga_baru'],
+        ];
 
         return view('usaha.index', [
             'data' => $data,
@@ -754,6 +727,40 @@ class UsahaController extends Controller
             'dataGrouped' => $dataGrouped,
             'grandTotals' => $grandTotals,
             'progressGrandTotals' => $progressGrandTotals,
+            'summaryComparison' => $summaryComparison,
         ]);
+    }
+    private function sumUsahaFieldsForUpload(?int $uploadId, array $fields): array
+    {
+        if (!$uploadId) {
+            return array_fill_keys($fields, 0);
+        }
+
+        $rows = Usaha::query()
+            ->where('upload_id', $uploadId)
+            ->get()
+            ->groupBy(function ($row) {
+                return implode('|', [
+                    $row->id_wilayah,
+                    $row->kd_kab,
+                    $row->nama_sls,
+                    $row->ppl,
+                    $row->pml,
+                ]);
+            })
+            ->map(function ($group) use ($fields) {
+                $row = clone $group->first();
+                foreach ($fields as $field) {
+                    $row->{$field} = $group->sum($field);
+                }
+                return $row;
+            });
+
+        $sums = [];
+        foreach ($fields as $field) {
+            $sums[$field] = $rows->sum($field);
+        }
+
+        return $sums;
     }
 }
