@@ -309,7 +309,7 @@ class DashboardController extends Controller
         // ----- Perbandingan dengan upload sebelumnya -----
         $previousDate = $availableDates
             ->filter(fn ($date) => $date < $selectedDate)
-            ->last();
+            ->first();
 
         if ($previousDate) {
 
