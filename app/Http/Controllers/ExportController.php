@@ -17,7 +17,7 @@ class ExportController extends Controller
 {
     public function index(Request $request)
     {
-        $scope = $request->input('scope', 'current'); // current | all
+           $scope = $request->input('scope', 'current'); // current | all
 
         $filters = [
             'petugas_username' => $request->input('petugas_username'),
@@ -25,6 +25,9 @@ class ExportController extends Controller
             'sls_code' => $request->input('sls_code'),
             'nama_kecamatan' => $request->input('nama_kecamatan'),
         ];
+
+        // Default role, konsisten dengan DashboardController
+        $roleForTotals = $filters['petugas_role'] ?: 'pencacah';
 
         if ($filters['nama_kecamatan']) {
             $filters['_usernames_in_kecamatan'] = PetugasReference::query()
@@ -35,7 +38,16 @@ class ExportController extends Controller
 
         $selectedDate = $request->input('tanggal');
 
+        // Ambil upload_id terbaru per tanggal, KHUSUS role aktif (hindari dobel kalau ada >1 upload di hari yang sama)
+        $latestUploadIdsPerDate = \App\Models\Upload::query()
+            ->where('petugas_role', $roleForTotals)
+            ->select('upload_date', \Illuminate\Support\Facades\DB::raw('MAX(id) as latest_id'))
+            ->groupBy('upload_date')
+            ->pluck('latest_id');
+
         $query = AssignmentSnapshot::query()
+            ->whereIn('upload_id', $latestUploadIdsPerDate)
+            ->where('petugas_role', $roleForTotals)
             ->selectRaw('
                 upload_date,
                 petugas_username,
@@ -57,8 +69,6 @@ class ExportController extends Controller
                 SUM(status_revoked_admin_kab) as status_revoked_admin_kab
             ')
             ->groupBy('upload_date', 'petugas_username')
-            // Diurutkan per PETUGAS dulu, baru per tanggal -> histori 1 petugas
-            // berderet rapi (bukan tercampur per tanggal).
             ->orderBy('petugas_username')
             ->orderBy('upload_date');
 
@@ -68,7 +78,6 @@ class ExportController extends Controller
 
         $query
             ->when($filters['petugas_username'], fn($q, $v) => $q->where('petugas_username', $v))
-            ->when($filters['petugas_role'], fn($q, $v) => $q->where('petugas_role', $v))
             ->when($filters['sls_code'], fn($q, $v) => $q->where('sls_code', 'like', '%' . $v . '%'))
             ->when($filters['nama_kecamatan'], function ($q) use ($filters) {
                 $q->whereIn('petugas_username', $filters['_usernames_in_kecamatan'] ?? []);
@@ -156,6 +165,7 @@ class ExportController extends Controller
             $filters
         );
     }
+
 
     private function exportXlsx($rows, string $filenameBase, string $scope, ?string $selectedDate = null, array $filters = [])
     {
