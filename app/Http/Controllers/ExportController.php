@@ -34,6 +34,7 @@ class ExportController extends Controller
         }
 
         $selectedDate = $request->input('tanggal');
+        $roleForTotals = $filters['petugas_role'] ?: 'pencacah';
 
         $query = AssignmentSnapshot::query()
             ->selectRaw('
@@ -61,6 +62,12 @@ class ExportController extends Controller
             // berderet rapi (bukan tercampur per tanggal).
             ->orderBy('petugas_username')
             ->orderBy('upload_date');
+
+        if ($scope === 'current' && !$selectedDate) {
+            $selectedDate = \App\Models\Upload::query()
+                ->where('petugas_role', $roleForTotals)
+                ->max('upload_date');
+        }
 
         if ($scope === 'current' && $selectedDate) {
             $query->where('upload_date', $selectedDate);
