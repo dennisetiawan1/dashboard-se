@@ -157,7 +157,6 @@ class ExportController extends Controller
         );
     }
 
-
     private function exportXlsx($rows, string $filenameBase, string $scope, ?string $selectedDate = null, array $filters = [])
     {
         $filename = $filenameBase . '.xlsx';
@@ -584,13 +583,7 @@ class ExportController extends Controller
     }
     public function exportUsaha()
     {
-        $latestUpload = \App\Models\UsahaUpload::query()
-            ->orderByDesc('upload_date')
-            ->orderByDesc('id')
-            ->first();
-
         $data = Usaha::query()
-            ->when($latestUpload, fn($q) => $q->where('upload_id', $latestUpload->id))
             ->get()
             ->groupBy(function ($row) {
                 return implode('|', [
