@@ -268,12 +268,13 @@ if ($selectedIndex === false) {
     $availableDatesForTrend = $sortedDates->slice(0, $selectedIndex + 1)->slice(-7)->values();
 }
 
-// Ambil upload_id terbaru untuk tiap tanggal (jaga-jaga kalau ada >1 upload di hari yang sama)
+// Ambil upload_id terbaru untuk tiap tanggal, KHUSUS role yang sedang dipakai (pencacah/pengawas)
 $latestUploadIdsPerDate = Upload::query()
+    ->where('petugas_role', $roleForTotals)
     ->select('upload_date', \Illuminate\Support\Facades\DB::raw('MAX(id) as latest_id'))
     ->groupBy('upload_date')
     ->pluck('latest_id');
-
+    
 $trendQuery = AssignmentSnapshot::query()
     ->whereIn('upload_id', $latestUploadIdsPerDate)
     ->where('petugas_role', $roleForTotals)
