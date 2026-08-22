@@ -7,38 +7,23 @@ use App\Models\PetugasReference;
 use App\Models\Upload;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
     public function index(Request $request): View
     {
-    
-// Riwayat upload
-$availableUploads = Upload::orderByDesc('upload_date')->get();
+        // Riwayat upload
+        $availableUploads = Upload::orderByDesc('upload_date')->get();
 
-// hanya tanggal unik
-$availableDates = $availableUploads
-    ->pluck('upload_date')
-    ->map(fn($d) => Carbon::parse($d)->format('Y-m-d'))
-    ->unique()
-    ->sortDesc()
-    ->values();
-
-// Upload terakhir berdasarkan waktu upload
-$latestUpload = Upload::latest('id')->first();
-
-// Tanggal yang dipilih user (jika ada)
-$selectedDate = $request->input('tanggal');
-
-// Jika belum memilih tanggal, gunakan upload terakhir
-if (!$selectedDate) {
-    $selectedDate = optional($latestUpload)->upload_date;
-}
-
-if (!$availableDates->contains($selectedDate)) {
-    $selectedDate = $availableDates->first();
-}
+        // hanya tanggal unik
+        $availableDates = $availableUploads
+            ->pluck('upload_date')
+            ->map(fn($d) => Carbon::parse($d)->format('Y-m-d'))
+            ->unique()
+            ->sortDesc()
+            ->values();
 
         $filters = [
             'petugas_username' => $request->input('petugas_username'),
@@ -48,6 +33,21 @@ if (!$availableDates->contains($selectedDate)) {
         ];
         // Role default untuk hitung total (kalau user belum pilih filter role)
         $roleForTotals = $filters['petugas_role'] ?: 'pencacah';
+
+        // Upload terakhir berdasarkan waktu upload, KHUSUS role yang sedang aktif
+        $latestUpload = Upload::where('petugas_role', $roleForTotals)->latest('id')->first();
+
+        // Tanggal yang dipilih user (jika ada)
+        $selectedDate = $request->input('tanggal');
+
+        // Jika belum memilih tanggal, gunakan upload terakhir (role aktif)
+        if (!$selectedDate) {
+            $selectedDate = optional($latestUpload)->upload_date;
+        }
+
+        if (!$availableDates->contains($selectedDate)) {
+            $selectedDate = $availableDates->first();
+        }
 
         $referenceMap = PetugasReference::query()
             ->get(['petugas_username', 'nama_petugas', 'kode_kecamatan', 'nama_kecamatan'])
@@ -70,8 +70,8 @@ if (!$availableDates->contains($selectedDate)) {
             ->select('petugas_username', 'petugas_email')
             ->whereNotNull('petugas_username')
             ->when($filters['petugas_role'], function ($q, $role) {
-    $q->where('petugas_role', $role);
-})
+                $q->where('petugas_role', $role);
+            })
             ->distinct()
             ->get()
             ->map(function ($p) use ($referenceMap) {
@@ -97,106 +97,110 @@ if (!$availableDates->contains($selectedDate)) {
             ->pluck('sls_code');
 
         // ----- Data untuk tanggal yang dipilih -----
-    // Resolve ke 1 upload_id spesifik untuk tanggal yang dipilih (ambil yang terbaru kalau ada >1 upload di hari itu)
-    $uploadIdForSelectedDate = $request->filled('tanggal')
-        ? Upload::query()->where('upload_date', $selectedDate)->orderByDesc('id')->value('id')
-        : optional($latestUpload)->id;
+        // Resolve ke 1 upload_id spesifik untuk tanggal yang dipilih, KHUSUS role aktif
+        $uploadIdForSelectedDate = $request->filled('tanggal')
+            ? Upload::query()
+                ->where('upload_date', $selectedDate)
+                ->where('petugas_role', $roleForTotals)
+                ->orderByDesc('id')
+                ->value('id')
+            : optional($latestUpload)->id;
 
-    $baseQuery = AssignmentSnapshot::query();
+        $baseQuery = AssignmentSnapshot::query();
 
-    if ($uploadIdForSelectedDate) {
-        $baseQuery->where('upload_id', $uploadIdForSelectedDate);
-    }
+        if ($uploadIdForSelectedDate) {
+            $baseQuery->where('upload_id', $uploadIdForSelectedDate);
+        }
 
-if ($filters['petugas_role']) {
-    $baseQuery->where('petugas_role', $roleForTotals);
-}
+        if ($filters['petugas_role']) {
+            $baseQuery->where('petugas_role', $roleForTotals);
+        }
 
-$this->applyFilters($baseQuery, $filters);
+        $this->applyFilters($baseQuery, $filters);
 
         $summaryRow = (clone $baseQuery)->selectRaw('
-        COALESCE(SUM(sls_total_assignment),0) as total,
-        COALESCE(SUM(status_open),0) as open,
-        COALESCE(SUM(status_draft),0) as draft,
-        COALESCE(SUM(status_submitted_pencacah),0) as submitted,
-        COALESCE(SUM(status_approved_pengawas),0) as approved,
-        COALESCE(SUM(status_rejected_pengawas),0) as rejected,
+            COALESCE(SUM(sls_total_assignment),0) as total,
+            COALESCE(SUM(status_open),0) as open,
+            COALESCE(SUM(status_draft),0) as draft,
+            COALESCE(SUM(status_submitted_pencacah),0) as submitted,
+            COALESCE(SUM(status_approved_pengawas),0) as approved,
+            COALESCE(SUM(status_rejected_pengawas),0) as rejected,
 
-        COALESCE(SUM(status_edited_pengawas),0) as edited_pengawas,
-        COALESCE(SUM(status_revoked_pengawas),0) as revoked_pengawas,
-        COALESCE(SUM(status_submitted_respondent),0) as submitted_respondent,
-        COALESCE(SUM(status_completed_admin_kab),0) as completed_admin,
-        COALESCE(SUM(status_edited_admin_kab),0) as edited_admin,
-        COALESCE(SUM(status_rejected_admin_kab),0) as rejected_admin,
-        COALESCE(SUM(status_revoked_admin_kab),0) as revoked_admin
-    ')->first();
+            COALESCE(SUM(status_edited_pengawas),0) as edited_pengawas,
+            COALESCE(SUM(status_revoked_pengawas),0) as revoked_pengawas,
+            COALESCE(SUM(status_submitted_respondent),0) as submitted_respondent,
+            COALESCE(SUM(status_completed_admin_kab),0) as completed_admin,
+            COALESCE(SUM(status_edited_admin_kab),0) as edited_admin,
+            COALESCE(SUM(status_rejected_admin_kab),0) as rejected_admin,
+            COALESCE(SUM(status_revoked_admin_kab),0) as revoked_admin
+        ')->first();
 
         $summary = $this->aggregateFromRow($summaryRow);
 
         // ----- Tabel ringkasan per petugas -----
         $perPetugas = (clone $baseQuery)
-        ->selectRaw('
-            petugas_username,
-            MAX(petugas_email) as petugas_email,
-            SUM(sls_total_assignment) as total_assignment,
-            SUM(status_open) as status_open,
-            SUM(status_draft) as status_draft,
-            SUM(status_submitted_pencacah) as status_submitted_pencacah,
-            SUM(status_approved_pengawas) as status_approved_pengawas,
-            SUM(status_rejected_pengawas) as status_rejected_pengawas,
+            ->selectRaw('
+                petugas_username,
+                MAX(petugas_email) as petugas_email,
+                SUM(sls_total_assignment) as total_assignment,
+                SUM(status_open) as status_open,
+                SUM(status_draft) as status_draft,
+                SUM(status_submitted_pencacah) as status_submitted_pencacah,
+                SUM(status_approved_pengawas) as status_approved_pengawas,
+                SUM(status_rejected_pengawas) as status_rejected_pengawas,
 
-            SUM(status_edited_pengawas) as status_edited_pengawas,
-            SUM(status_revoked_pengawas) as status_revoked_pengawas,
-            SUM(status_submitted_respondent) as status_submitted_respondent,
-            SUM(status_completed_admin_kab) as status_completed_admin_kab,
-            SUM(status_edited_admin_kab) as status_edited_admin_kab,
-            SUM(status_rejected_admin_kab) as status_rejected_admin_kab,
-            SUM(status_revoked_admin_kab) as status_revoked_admin_kab
-        ')
+                SUM(status_edited_pengawas) as status_edited_pengawas,
+                SUM(status_revoked_pengawas) as status_revoked_pengawas,
+                SUM(status_submitted_respondent) as status_submitted_respondent,
+                SUM(status_completed_admin_kab) as status_completed_admin_kab,
+                SUM(status_edited_admin_kab) as status_edited_admin_kab,
+                SUM(status_rejected_admin_kab) as status_rejected_admin_kab,
+                SUM(status_revoked_admin_kab) as status_revoked_admin_kab
+            ')
             ->groupBy('petugas_username')
             ->orderByDesc('total_assignment')
             ->get()
             ->map(function ($row) use ($referenceMap) {
-    $row->progress = $row->total_assignment > 0
-        ? round(($row->status_approved_pengawas / $row->total_assignment) * 100, 1)
-        : 0;
+                $row->progress = $row->total_assignment > 0
+                    ? round(($row->status_approved_pengawas / $row->total_assignment) * 100, 1)
+                    : 0;
 
-    // % Non Open = (Assignment - Open) / Assignment
-    $row->status_non_open =
-        $row->total_assignment - $row->status_open;
+                // % Non Open = (Assignment - Open) / Assignment
+                $row->status_non_open =
+                    $row->total_assignment - $row->status_open;
 
-    $row->pct_non_open = $row->total_assignment > 0
-        ? round(($row->status_non_open / $row->total_assignment) * 100, 2)
-        : 0;
+                $row->pct_non_open = $row->total_assignment > 0
+                    ? round(($row->status_non_open / $row->total_assignment) * 100, 2)
+                    : 0;
 
-    // % Selain Non Open & Draft = (Assignment - Open - Draft) / Assignment
-    $row->status_non_open_draft =
-        $row->total_assignment
-        - $row->status_open
-        - $row->status_draft;
+                // % Selain Non Open & Draft = (Assignment - Open - Draft) / Assignment
+                $row->status_non_open_draft =
+                    $row->total_assignment
+                    - $row->status_open
+                    - $row->status_draft;
 
-    $row->pct_submitted = $row->total_assignment > 0
-        ? round(($row->status_non_open_draft / $row->total_assignment) * 100, 2)
-        : 0;
+                $row->pct_submitted = $row->total_assignment > 0
+                    ? round(($row->status_non_open_draft / $row->total_assignment) * 100, 2)
+                    : 0;
 
-    // % Approved = (Assignment - Open - Draft - Submitted) / Assignment
-    $row->status_approved_progress =
-        $row->total_assignment
-        - $row->status_open
-        - $row->status_draft
-        - $row->status_submitted_pencacah;
+                // % Approved = (Assignment - Open - Draft - Submitted) / Assignment
+                $row->status_approved_progress =
+                    $row->total_assignment
+                    - $row->status_open
+                    - $row->status_draft
+                    - $row->status_submitted_pencacah;
 
-    $row->pct_approved = $row->total_assignment > 0
-        ? round(($row->status_approved_progress / $row->total_assignment) * 100, 2)
-        : 0;
+                $row->pct_approved = $row->total_assignment > 0
+                    ? round(($row->status_approved_progress / $row->total_assignment) * 100, 2)
+                    : 0;
 
-    $ref = $referenceMap->get($row->petugas_username);
-    $row->nama_petugas = $ref->nama_petugas ?? null;
-    $row->kode_kecamatan = $ref->kode_kecamatan ?? null;
-    $row->nama_kecamatan = $ref->nama_kecamatan ?? null;
+                $ref = $referenceMap->get($row->petugas_username);
+                $row->nama_petugas = $ref->nama_petugas ?? null;
+                $row->kode_kecamatan = $ref->kode_kecamatan ?? null;
+                $row->nama_kecamatan = $ref->nama_kecamatan ?? null;
 
-    return $row;
-});
+                return $row;
+            });
 
         // ----- Kelompokkan per Kecamatan -----
         $perPetugasGrouped = $perPetugas
@@ -257,86 +261,87 @@ $this->applyFilters($baseQuery, $filters);
             ->sortBy('kode')
             ->values();
 
-// ----- Data tren historis (dari awal sampai tanggal terpilih, maks 7) -----
-$sortedDates = $availableDates->unique()->sort()->values();
-$selectedIndex = $sortedDates->search($selectedDate);
+        // ----- Data tren historis (dari awal sampai tanggal terpilih, maks 7) -----
+        $sortedDates = $availableDates->unique()->sort()->values();
+        $selectedIndex = $sortedDates->search($selectedDate);
 
-if ($selectedIndex === false) {
-    $availableDatesForTrend = $sortedDates->slice(-7)->values();
-} else {
-    // Ambil semua tanggal dari awal sampai tanggal terpilih, lalu ambil 7 terakhir
-    $availableDatesForTrend = $sortedDates->slice(0, $selectedIndex + 1)->slice(-7)->values();
-}
+        if ($selectedIndex === false) {
+            $availableDatesForTrend = $sortedDates->slice(-7)->values();
+        } else {
+            $availableDatesForTrend = $sortedDates->slice(0, $selectedIndex + 1)->slice(-7)->values();
+        }
 
-// Ambil upload_id terbaru untuk tiap tanggal, KHUSUS role yang sedang dipakai (pencacah/pengawas)
-$latestUploadIdsPerDate = Upload::query()
-    ->where('petugas_role', $roleForTotals)
-    ->select('upload_date', \Illuminate\Support\Facades\DB::raw('MAX(id) as latest_id'))
-    ->groupBy('upload_date')
-    ->pluck('latest_id');
-    
-$trendQuery = AssignmentSnapshot::query()
-    ->whereIn('upload_id', $latestUploadIdsPerDate)
-    ->where('petugas_role', $roleForTotals)
-    ->selectRaw('
-        upload_date,
-        COALESCE(SUM(sls_total_assignment),0) as total,
-        COALESCE(SUM(status_open),0) as open,
-        COALESCE(SUM(status_draft),0) as draft,
-        COALESCE(SUM(status_submitted_pencacah),0) as submitted,
-        COALESCE(SUM(status_approved_pengawas),0) as approved,
-        COALESCE(SUM(status_rejected_pengawas),0) as rejected,
+        // Ambil upload_id terbaru untuk tiap tanggal, KHUSUS role yang sedang dipakai
+        $latestUploadIdsPerDate = Upload::query()
+            ->where('petugas_role', $roleForTotals)
+            ->select('upload_date', DB::raw('MAX(id) as latest_id'))
+            ->groupBy('upload_date')
+            ->pluck('latest_id');
 
-        COALESCE(SUM(status_edited_pengawas),0) as edited_pengawas,
-        COALESCE(SUM(status_revoked_pengawas),0) as revoked_pengawas,
-        COALESCE(SUM(status_submitted_respondent),0) as submitted_respondent,
-        COALESCE(SUM(status_completed_admin_kab),0) as completed_admin,
-        COALESCE(SUM(status_edited_admin_kab),0) as edited_admin,
-        COALESCE(SUM(status_rejected_admin_kab),0) as rejected_admin,
-        COALESCE(SUM(status_revoked_admin_kab),0) as revoked_admin,
+        $trendQuery = AssignmentSnapshot::query()
+            ->whereIn('upload_id', $latestUploadIdsPerDate)
+            ->where('petugas_role', $roleForTotals)
+            ->selectRaw('
+                upload_date,
+                COALESCE(SUM(sls_total_assignment),0) as total,
+                COALESCE(SUM(status_open),0) as open,
+                COALESCE(SUM(status_draft),0) as draft,
+                COALESCE(SUM(status_submitted_pencacah),0) as submitted,
+                COALESCE(SUM(status_approved_pengawas),0) as approved,
+                COALESCE(SUM(status_rejected_pengawas),0) as rejected,
 
-        COALESCE(SUM(status_draft + status_submitted_pencacah + status_approved_pengawas + status_rejected_pengawas),0) as non_open,
-        COALESCE(SUM(status_submitted_pencacah + status_approved_pengawas + status_rejected_pengawas),0) as non_open_draft
-    ')
-    ->groupBy('upload_date')
-    ->orderBy('upload_date');
+                COALESCE(SUM(status_edited_pengawas),0) as edited_pengawas,
+                COALESCE(SUM(status_revoked_pengawas),0) as revoked_pengawas,
+                COALESCE(SUM(status_submitted_respondent),0) as submitted_respondent,
+                COALESCE(SUM(status_completed_admin_kab),0) as completed_admin,
+                COALESCE(SUM(status_edited_admin_kab),0) as edited_admin,
+                COALESCE(SUM(status_rejected_admin_kab),0) as rejected_admin,
+                COALESCE(SUM(status_revoked_admin_kab),0) as revoked_admin,
+
+                COALESCE(SUM(status_draft + status_submitted_pencacah + status_approved_pengawas + status_rejected_pengawas),0) as non_open,
+                COALESCE(SUM(status_submitted_pencacah + status_approved_pengawas + status_rejected_pengawas),0) as non_open_draft
+            ')
+            ->groupBy('upload_date')
+            ->orderBy('upload_date');
         $this->applyFilters($trendQuery, $filters);
         $trendRows = $trendQuery->get()->keyBy(fn ($r) => Carbon::parse($r->upload_date)->format('Y-m-d'));
 
         // ----- Perbandingan dengan upload sebelumnya -----
-       $previousDate = $availableDates
-        ->filter(fn ($date) => $date < $selectedDate)
-        ->last();
+        $previousDate = $availableDates
+            ->filter(fn ($date) => $date < $selectedDate)
+            ->last();
 
-if ($previousDate) {
+        if ($previousDate) {
 
-    $previousUploadIdForDate = Upload::query()
-        ->where('upload_date', $previousDate)
-        ->orderByDesc('id')
-        ->value('id');
+            $previousUploadIdForDate = Upload::query()
+                ->where('upload_date', $previousDate)
+                ->where('petugas_role', $roleForTotals)
+                ->orderByDesc('id')
+                ->value('id');
 
-    $prevQueryDirect = AssignmentSnapshot::query()
-        ->where('upload_id', $previousUploadIdForDate)
-        ->where('petugas_role', $roleForTotals)
-        ->selectRaw('
-        COALESCE(SUM(sls_total_assignment),0) as total,
-        COALESCE(SUM(status_open),0) as open,
-        COALESCE(SUM(status_draft),0) as draft,
-        COALESCE(SUM(status_submitted_pencacah),0) as submitted,
-        COALESCE(SUM(status_approved_pengawas),0) as approved,
-        COALESCE(SUM(status_rejected_pengawas),0) as rejected,
-        COALESCE(SUM(status_draft + status_submitted_pencacah + status_approved_pengawas + status_rejected_pengawas),0) as non_open,
-        COALESCE(SUM(status_submitted_pencacah + status_approved_pengawas + status_rejected_pengawas),0) as non_open_draft
-    ');
+            $prevQueryDirect = AssignmentSnapshot::query()
+                ->where('upload_id', $previousUploadIdForDate)
+                ->where('petugas_role', $roleForTotals)
+                ->selectRaw('
+                    COALESCE(SUM(sls_total_assignment),0) as total,
+                    COALESCE(SUM(status_open),0) as open,
+                    COALESCE(SUM(status_draft),0) as draft,
+                    COALESCE(SUM(status_submitted_pencacah),0) as submitted,
+                    COALESCE(SUM(status_approved_pengawas),0) as approved,
+                    COALESCE(SUM(status_rejected_pengawas),0) as rejected,
+                    COALESCE(SUM(status_draft + status_submitted_pencacah + status_approved_pengawas + status_rejected_pengawas),0) as non_open,
+                    COALESCE(SUM(status_submitted_pencacah + status_approved_pengawas + status_rejected_pengawas),0) as non_open_draft
+                ');
 
-$this->applyFilters($prevQueryDirect, $filters);
+            $this->applyFilters($prevQueryDirect, $filters);
 
-    $prevRowDirect = $prevQueryDirect->first();
+            $prevRowDirect = $prevQueryDirect->first();
 
-    if ($prevRowDirect) {
-        $trendRows->put($previousDate, $prevRowDirect);
-    }
-}
+            if ($prevRowDirect) {
+                $trendRows->put($previousDate, $prevRowDirect);
+            }
+        }
+
         $trend = [
             'labels' => [],
             'total' => [],
@@ -350,40 +355,29 @@ $this->applyFilters($prevQueryDirect, $filters);
             'pct_approved' => [],
         ];
 
-foreach ($availableDatesForTrend as $date) {
+        foreach ($availableDatesForTrend as $date) {
 
-    $row = $trendRows->get(Carbon::parse($date)->format('Y-m-d'));
+            $row = $trendRows->get(Carbon::parse($date)->format('Y-m-d'));
 
-    $trend['labels'][] = Carbon::parse($date)->translatedFormat('d M');
-    $trend['total'][] = $row ? (int)$row->total : 0;
-    $trend['open'][] = $row ? (int)$row->open : 0;
-    $trend['draft'][] = $row ? (int)$row->draft : 0;
-    $trend['submitted'][] = $row ? (int)$row->submitted : 0;
-    $trend['approved'][] = $row ? (int)$row->approved : 0;
+            $trend['labels'][] = Carbon::parse($date)->translatedFormat('d M');
+            $trend['total'][] = $row ? (int)$row->total : 0;
+            $trend['open'][] = $row ? (int)$row->open : 0;
+            $trend['draft'][] = $row ? (int)$row->draft : 0;
+            $trend['submitted'][] = $row ? (int)$row->submitted : 0;
+            $trend['approved'][] = $row ? (int)$row->approved : 0;
 
-    if ($row && $row->total > 0) {
+            if ($row && $row->total > 0) {
+                $approvedBaru = $row->total - $row->open - $row->draft - $row->submitted;
 
-    $approvedBaru =
-    $row->total
-    - $row->open
-    - $row->draft
-    - $row->submitted;
+                $trend['pct_approved'][] = round(($approvedBaru / $row->total) * 100, 1);
+            } else {
+                $trend['pct_approved'][] = 0;
+            }
 
-    $trend['pct_approved'][] = round(
-        ($approvedBaru / $row->total) * 100,
-        1
-    );
-
-} else {
-
-    $trend['pct_approved'][] = 0;
-
-}
-
-    $trend['rejected'][] = $row ? (int)$row->rejected : 0;
-    $trend['non_open'][] = $row ? (int)$row->non_open : 0;
-    $trend['non_open_draft'][] = $row ? (int)$row->non_open_draft : 0;
-}
+            $trend['rejected'][] = $row ? (int)$row->rejected : 0;
+            $trend['non_open'][] = $row ? (int)$row->non_open : 0;
+            $trend['non_open_draft'][] = $row ? (int)$row->non_open_draft : 0;
+        }
 
         $comparison = null;
 
@@ -413,18 +407,14 @@ foreach ($availableDatesForTrend as $date) {
             ])->values())
             ->toArray();
 
-       // Mapping kecamatan -> daftar SLS code
-        $kecamatanSlsMap = \App\Models\AssignmentSnapshot::query()
+        // Mapping kecamatan -> daftar SLS code (pakai upload_id yang sudah resolve role juga)
+        $kecamatanSlsMap = AssignmentSnapshot::query()
             ->whereNotNull('sls_code')
             ->whereNotNull('petugas_username')
             ->where('petugas_role', $roleForTotals);
 
-        if ($request->filled('tanggal')) {
-            // Jika user memilih tanggal
-            $kecamatanSlsMap->whereDate('upload_date', $selectedDate);
-        } else {
-            // Dashboard pertama kali dibuka → upload terakhir saja
-            $kecamatanSlsMap->where('upload_id', $latestUpload->id);
+        if ($uploadIdForSelectedDate) {
+            $kecamatanSlsMap->where('upload_id', $uploadIdForSelectedDate);
         }
 
         $kecamatanSlsMap = $kecamatanSlsMap
@@ -472,53 +462,42 @@ foreach ($availableDatesForTrend as $date) {
         $submitted = (int) ($row->submitted ?? 0);
         $approved = (int) ($row->approved ?? 0);
         $rejected = (int) ($row->rejected ?? 0);
-        $editedPengawas = (int) ($row->edited_pengawas ?? 0);
-        $revokedPengawas = (int) ($row->revoked_pengawas ?? 0);
-        $submittedRespondent = (int) ($row->submitted_respondent ?? 0);
-        $completedAdmin = (int) ($row->completed_admin ?? 0);
-        $editedAdmin = (int) ($row->edited_admin ?? 0);
-        $rejectedAdmin = (int) ($row->rejected_admin ?? 0);
-        $revokedAdmin = (int) ($row->revoked_admin ?? 0);
         $nonOpen = $total - $open;
         $nonOpenDraft = $total - $open - $draft;
-        $approvedBaru = $total - $open - $draft - $submitted;
 
         return [
-    'total' => $total,
-    'open' => $open,
-    'draft' => $draft,
-    'submitted' => $submitted,
-    'approved' => $approved,
-    'rejected' => $rejected,
+            'total' => $total,
+            'open' => $open,
+            'draft' => $draft,
+            'submitted' => $submitted,
+            'approved' => $approved,
+            'rejected' => $rejected,
 
-    'non_open' => $nonOpen,
-    'non_open_draft' => $nonOpenDraft,
+            'non_open' => $nonOpen,
+            'non_open_draft' => $nonOpenDraft,
 
-    'pct_open' => $total > 0 ? round($open / $total * 100, 1) : 0,
-    'pct_draft' => $total > 0 ? round($draft / $total * 100, 1) : 0,
+            'pct_open' => $total > 0 ? round($open / $total * 100, 1) : 0,
+            'pct_draft' => $total > 0 ? round($draft / $total * 100, 1) : 0,
 
-    // % Non Open = (Assignment - Open) / Assignment × 100
-    'pct_non_open' => $total > 0
-        ? round((($total - $open) / $total) * 100, 2)
-        : 0,
+            'pct_non_open' => $total > 0
+                ? round((($total - $open) / $total) * 100, 2)
+                : 0,
 
-    // % Selain Non Open & Draft = (Assignment - Open - Draft) / Assignment × 100
-    'pct_submitted' => $total > 0
-        ? round((($total - $open - $draft) / $total) * 100, 2)
-        : 0,
+            'pct_submitted' => $total > 0
+                ? round((($total - $open - $draft) / $total) * 100, 2)
+                : 0,
 
-    'pct_submitted_pencacah' => $total > 0
-        ? round($submitted / $total * 100, 1)
-        : 0,
+            'pct_submitted_pencacah' => $total > 0
+                ? round($submitted / $total * 100, 1)
+                : 0,
 
-    // % Approved = (Assignment - Open - Draft - Submitted) / Assignment × 100
-    'pct_approved' => $total > 0
-        ? round((($total - $open - $draft - $submitted) / $total) * 100, 2)
-        : 0,
+            'pct_approved' => $total > 0
+                ? round((($total - $open - $draft - $submitted) / $total) * 100, 2)
+                : 0,
 
-    'pct_rejected' => $total > 0
-        ? round($rejected / $total * 100, 1)
-        : 0,
-];
+            'pct_rejected' => $total > 0
+                ? round($rejected / $total * 100, 1)
+                : 0,
+        ];
     }
 }
