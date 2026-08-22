@@ -324,8 +324,17 @@ class ExportController extends Controller
      */
     private function addKecamatanRecapSheet(Spreadsheet $spreadsheet, string $selectedDate, array $filters, bool $useActiveSheet = false): void
     {
-        $query = AssignmentSnapshot::query()
+            // Role yang dipakai buat filter — konsisten dengan index()
+        $roleForRecap = $filters['petugas_role'] ?: 'pencacah';
+
+        // Ambil upload_id TERBARU untuk tanggal & role ini (hindari sum ganda kalau ada >1 upload di hari yang sama)
+        $latestUploadId = \App\Models\Upload::query()
+            ->where('petugas_role', $roleForRecap)
             ->where('upload_date', $selectedDate)
+            ->max('id');
+
+        $query = AssignmentSnapshot::query()
+            ->where('upload_id', $latestUploadId)   // <-- ganti dari where('upload_date', $selectedDate)
             ->when($filters['petugas_role'] ?? null, function ($q, $v) {
                 $q->where('petugas_role', $v);
             })
