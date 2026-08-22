@@ -319,26 +319,29 @@ class DashboardController extends Controller
                 ->orderByDesc('id')
                 ->value('id');
 
-            $prevQueryDirect = AssignmentSnapshot::query()
-                ->where('upload_id', $previousUploadIdForDate)
-                ->where('petugas_role', $roleForTotals)
-                ->selectRaw('
-                    COALESCE(SUM(sls_total_assignment),0) as total,
-                    COALESCE(SUM(status_open),0) as open,
-                    COALESCE(SUM(status_draft),0) as draft,
-                    COALESCE(SUM(status_submitted_pencacah),0) as submitted,
-                    COALESCE(SUM(status_approved_pengawas),0) as approved,
-                    COALESCE(SUM(status_rejected_pengawas),0) as rejected,
-                    COALESCE(SUM(status_draft + status_submitted_pencacah + status_approved_pengawas + status_rejected_pengawas),0) as non_open,
-                    COALESCE(SUM(status_submitted_pencacah + status_approved_pengawas + status_rejected_pengawas),0) as non_open_draft
-                ');
+            if ($previousUploadIdForDate) {
 
-            $this->applyFilters($prevQueryDirect, $filters);
+                $prevQueryDirect = AssignmentSnapshot::query()
+                    ->where('upload_id', $previousUploadIdForDate)
+                    ->where('petugas_role', $roleForTotals)
+                    ->selectRaw('
+                        COALESCE(SUM(sls_total_assignment),0) as total,
+                        COALESCE(SUM(status_open),0) as open,
+                        COALESCE(SUM(status_draft),0) as draft,
+                        COALESCE(SUM(status_submitted_pencacah),0) as submitted,
+                        COALESCE(SUM(status_approved_pengawas),0) as approved,
+                        COALESCE(SUM(status_rejected_pengawas),0) as rejected,
+                        COALESCE(SUM(status_draft + status_submitted_pencacah + status_approved_pengawas + status_rejected_pengawas),0) as non_open,
+                        COALESCE(SUM(status_submitted_pencacah + status_approved_pengawas + status_rejected_pengawas),0) as non_open_draft
+                    ');
 
-            $prevRowDirect = $prevQueryDirect->first();
+                $this->applyFilters($prevQueryDirect, $filters);
 
-            if ($prevRowDirect) {
-                $trendRows->put($previousDate, $prevRowDirect);
+                $prevRowDirect = $prevQueryDirect->first();
+
+                if ($prevRowDirect) {
+                    $trendRows->put($previousDate, $prevRowDirect);
+                }
             }
         }
 
