@@ -97,19 +97,16 @@ if (!$availableDates->contains($selectedDate)) {
             ->pluck('sls_code');
 
         // ----- Data untuk tanggal yang dipilih -----
-$baseQuery = AssignmentSnapshot::query();
+    // Resolve ke 1 upload_id spesifik untuk tanggal yang dipilih (ambil yang terbaru kalau ada >1 upload di hari itu)
+    $uploadIdForSelectedDate = $request->filled('tanggal')
+        ? Upload::query()->where('upload_date', $selectedDate)->orderByDesc('id')->value('id')
+        : optional($latestUpload)->id;
 
-if ($request->filled('tanggal')) {
+    $baseQuery = AssignmentSnapshot::query();
 
-    // Jika user memilih tanggal
-    $baseQuery->whereDate('upload_date', $selectedDate);
-
-} else {
-
-    // Dashboard pertama kali dibuka → upload terakhir saja
-    $baseQuery->where('upload_id', $latestUpload->id);
-
-}
+    if ($uploadIdForSelectedDate) {
+        $baseQuery->where('upload_id', $uploadIdForSelectedDate);
+    }
 
 if ($filters['petugas_role']) {
     $baseQuery->where('petugas_role', $roleForTotals);
@@ -271,7 +268,14 @@ if ($selectedIndex === false) {
     $availableDatesForTrend = $sortedDates->slice(0, $selectedIndex + 1)->slice(-7)->values();
 }
 
+// Ambil upload_id terbaru untuk tiap tanggal (jaga-jaga kalau ada >1 upload di hari yang sama)
+$latestUploadIdsPerDate = Upload::query()
+    ->select('upload_date', \Illuminate\Support\Facades\DB::raw('MAX(id) as latest_id'))
+    ->groupBy('upload_date')
+    ->pluck('latest_id');
+
 $trendQuery = AssignmentSnapshot::query()
+    ->whereIn('upload_id', $latestUploadIdsPerDate)
     ->where('petugas_role', $roleForTotals)
     ->selectRaw('
         upload_date,
@@ -305,8 +309,13 @@ $trendQuery = AssignmentSnapshot::query()
 
 if ($previousDate) {
 
+    $previousUploadIdForDate = Upload::query()
+        ->where('upload_date', $previousDate)
+        ->orderByDesc('id')
+        ->value('id');
+
     $prevQueryDirect = AssignmentSnapshot::query()
-        ->whereDate('upload_date', $previousDate)
+        ->where('upload_id', $previousUploadIdForDate)
         ->where('petugas_role', $roleForTotals)
         ->selectRaw('
         COALESCE(SUM(sls_total_assignment),0) as total,
@@ -327,7 +336,6 @@ $this->applyFilters($prevQueryDirect, $filters);
         $trendRows->put($previousDate, $prevRowDirect);
     }
 }
-
         $trend = [
             'labels' => [],
             'total' => [],
