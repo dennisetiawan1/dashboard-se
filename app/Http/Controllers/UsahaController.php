@@ -684,7 +684,7 @@ class UsahaController extends Controller
 
             // ----- Cari upload sebelumnya (untuk perbandingan naik/turun) -----
         $previousUpload = UsahaUpload::query()
-            ->when($latestUpload, fn($q) => $q->where('id', '!=', $latestUpload->id))
+            ->when($latestUpload, fn($q) => $q->where('upload_date', '<', $latestUpload->upload_date))
             ->orderByDesc('upload_date')
             ->orderByDesc('id')
             ->first();
