@@ -23,6 +23,14 @@ class UsahaController extends Controller
             ])
             ->keyBy('petugas_username');
 
+            /* FILTER OPTIONS - KECAMATAN */
+        $kecamatanOptions = PetugasReference::query()
+            ->whereNotNull('nama_kecamatan')
+            ->where('nama_kecamatan', '!=', '')
+            ->distinct()
+            ->orderBy('nama_kecamatan')
+            ->pluck('nama_kecamatan');
+
         //  AMBIL UPLOAD TERBARU
 
         $latestUpload = UsahaUpload::query()
@@ -61,6 +69,16 @@ class UsahaController extends Controller
 
         if ($request->filled('pml')) {
             $query->where('pml', $request->pml);
+        }
+
+                /* FILTER KECAMATAN */
+        if ($request->filled('nama_kecamatan')) {
+            $usernames = PetugasReference::query()
+                ->where('nama_kecamatan', $request->nama_kecamatan)
+                ->pluck('petugas_username')
+                ->all();
+
+            $query->whereIn('ppl', $usernames);
         }
 
         //  DATA USAHA
@@ -262,11 +280,16 @@ class UsahaController extends Controller
         //    FILTER OPTIONS - PPL
 
         $pplOptions = Usaha::query()
-            ->whereNotNull('ppl')
-            ->where('ppl', '!=', '')
+            ->join('petugas_references', 'petugas_references.petugas_username', '=', 'usaha.ppl')
+            ->whereNotNull('usaha.ppl')
+            ->where('usaha.ppl', '!=', '')
+            ->select(
+                'petugas_references.petugas_username',
+                'petugas_references.nama_petugas'
+            )
             ->distinct()
-            ->orderBy('ppl')
-            ->pluck('ppl');
+            ->orderBy('petugas_references.nama_petugas')
+            ->get();
 
         // FILTER OPTIONS - PML
 
@@ -750,6 +773,7 @@ class UsahaController extends Controller
             'progressGrandTotals' => $progressGrandTotals,
             'summaryComparison' => $summaryComparison,
             'percentageComparison' => $percentageComparison,
+            'kecamatanOptions' => $kecamatanOptions,
         ]);
     }
     private function sumUsahaFieldsForUpload(?int $uploadId, array $fields): array

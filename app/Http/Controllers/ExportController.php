@@ -796,6 +796,7 @@ class ExportController extends Controller
                 'nama_kecamatan',
             ])
             ->keyBy('petugas_username');
+            
 
         $latestUpload = UsahaUpload::query()
             ->orderByDesc('upload_date')
@@ -853,6 +854,14 @@ class ExportController extends Controller
             'jumlah_prelist_keluarga',
             'jumlah_keluarga_realisasi',
         ];
+        if ($request->filled('nama_kecamatan')) {
+            $usernames = PetugasReference::query()
+                ->where('nama_kecamatan', $request->nama_kecamatan)
+                ->pluck('petugas_username')
+                ->all();
+
+            $query->whereIn('ppl', $usernames);
+        }
 
         $data = $query
             ->get()

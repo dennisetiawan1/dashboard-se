@@ -909,7 +909,7 @@
                                     {{-- NAMA PETUGAS --}}
 
                                     <td
-                                        class="sticky left-0 z-10 bg-slate-50/60
+                                        class="sticky left-0 z-10 bg-slate-50
                                 pl-10 pr-5 py-3 text-slate-900
                                 whitespace-nowrap border-r border-slate-200">
 
@@ -1133,68 +1133,123 @@
 
         </div>
         
-        {{-- ================= EXPORT DATA USAHA ================= --}}
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        {{-- ================= EXPORT & FILTER DATA USAHA ================= --}}
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
 
-            <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
+            {{-- Header + Form Export --}}
+            <div class="p-6">
 
-                <div>
+                <div class="mb-5">
                     <h3 class="text-lg font-semibold text-slate-800">
                         Export Data Usaha
                     </h3>
-
                     <p class="text-sm text-slate-500 mt-1">
-                        Export seluruh data usaha ke dalam file Excel.
+                        Pilih filter di bawah (opsional), lalu export ke Excel.
                     </p>
                 </div>
 
-                <form method="GET"
-                    action="{{ route('export.usaha.grouped') }}"
-                    class="flex flex-wrap gap-4 items-end">
+                <form method="GET" action="{{ route('usaha') }}">
 
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                            Data
-                        </label>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
 
-                        <input
-                            type="text"
-                            value="Seluruh Data Usaha"
-                            readonly
-                            class="rounded-xl border border-slate-300 bg-gray-100 px-3 py-2.5 text-sm text-slate-500 w-56 cursor-not-allowed">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                Kecamatan
+                            </label>
+                            <select name="nama_kecamatan"
+                                class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700">
+                                <option value="">Semua Kecamatan</option>
+                                @foreach ($kecamatanOptions as $kec)
+                                    <option value="{{ $kec }}" {{ request('nama_kecamatan') == $kec ? 'selected' : '' }}>
+                                        {{ $kec }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                Kode Kabupaten
+                            </label>
+                            <select name="kd_kab"
+                                class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700">
+                                <option value="">Semua Kabupaten</option>
+                                @foreach ($kabupatenOptions as $kab)
+                                    <option value="{{ $kab }}" {{ request('kd_kab') == $kab ? 'selected' : '' }}>
+                                        {{ $kab }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                PPL
+                            </label>
+                            <select name="ppl"
+                                class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700">
+                                <option value="">Semua PPL</option>
+                                @foreach ($pplOptions as $ppl)
+                                    <option value="{{ $ppl->petugas_username }}"
+                                        {{ request('ppl') == $ppl->petugas_username ? 'selected' : '' }}>
+                                        {{ $ppl->nama_petugas }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                PML
+                            </label>
+                            <select name="pml"
+                                class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700">
+                                <option value="">Semua PML</option>
+                                @foreach ($pmlOptions as $pml)
+                                    <option value="{{ $pml }}" {{ request('pml') == $pml ? 'selected' : '' }}>
+                                        {{ $pml }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
                     </div>
 
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                            Format
-                        </label>
+                    <div class="flex items-center justify-between mt-5 pt-4 border-t border-slate-100">
 
-                        <input
-                            type="text"
-                            value="Excel"
-                            readonly
-                            class="rounded-xl border border-slate-300 bg-gray-100 px-3 py-2.5 text-sm text-slate-400 w-36 cursor-not-allowed">
+                        <p class="text-xs text-slate-400">
+                            
+                        </p>
+
+                        <div class="flex gap-3">
+                            @if(request()->anyFilled(['nama_kecamatan', 'kd_kab', 'ppl', 'pml']))
+                                <a href="{{ route('usaha') }}"
+                                    class="rounded-xl px-5 h-11 flex items-center text-sm font-semibold text-slate-500 hover:text-slate-700 transition">
+                                    Reset
+                                </a>
+                            @endif
+
+                            <button type="submit"
+                                class="bg-sky-600 hover:bg-sky-700 text-white rounded-xl px-6 h-11 text-sm font-semibold shadow-sm hover:shadow transition">
+                                Filter
+                            </button>
+
+                            <button type="submit"
+                                formaction="{{ route('export.usaha.grouped') }}"
+                                class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6 h-11 text-sm font-semibold shadow-sm hover:shadow transition">
+                                Export ke Excel
+                            </button>
+                        </div>
+
                     </div>
-
-                    <button
-                        type="submit"
-                        class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6 h-11 text-sm font-semibold shadow-sm hover:shadow transition">
-
-                        Export
-
-                    </button>
 
                 </form>
 
             </div>
 
-        </div>
-
-                {{-- FILTER KOLOM TABEL USAHA --}}
-
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-
-            <div x-data="{ showFilter: false }" :class="showFilter ? 'ring-1 ring-sky-200' : ''" class="transition">
+            {{-- Filter Kolom (collapsible, terpisah dari filter export) --}}
+            <div x-data="{ showFilter: false }" :class="showFilter ? 'ring-1 ring-sky-200' : ''"
+                class="border-t border-slate-100 transition">
 
                 <button @click="showFilter = !showFilter; if (showFilter) $store.usahaColumns.initDraft()"
                     class="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-slate-50 transition">
@@ -1211,7 +1266,7 @@
                         <div>
                             <div class="flex items-center gap-2">
                                 <h3 class="text-sm font-semibold text-slate-700">
-                                    Filter Kolom
+                                    Filter Kolom Tabel
                                 </h3>
 
                                 <span x-show="$store.usahaColumns.visibleCount() < $store.usahaColumns.keys().length"
@@ -1222,6 +1277,7 @@
                             </div>
 
                             <p class="text-xs text-slate-400 mt-0.5">
+                                Kolom yang ditampilkan di tabel (tidak memengaruhi hasil export) —
                                 <span x-text="$store.usahaColumns.visibleCount()"></span> dari
                                 <span x-text="$store.usahaColumns.keys().length"></span> kolom aktif
                             </p>
