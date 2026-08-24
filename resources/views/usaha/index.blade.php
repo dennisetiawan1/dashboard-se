@@ -1681,9 +1681,6 @@
                                         <div class="font-semibold text-slate-600 text-sm">
                                             {{ $namaPetugas }}
                                         </div>
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.id_wilayah" x-cloak class="px-5 py-3 bg-slate-50">
                                         <div class="text-xs text-slate-400">
                                             {{ $rows->first()->email_petugas ?: '-' }}
                                         </div>
