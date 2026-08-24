@@ -516,7 +516,7 @@ class ExportController extends Controller
         }
 
         // Baris grand total (kabupaten/kota)
-        $labelGrand = '[' . ($kabupatenCode ?? '-') . '] ' . mb_strtoupper($kabupatenName ?? 'TOTAL');
+        $labelGrand = 'TOTAL';
         $this->writeKecamatanRecapRow(
             $sheet,
             $rowIndex,
