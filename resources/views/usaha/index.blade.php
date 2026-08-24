@@ -1675,18 +1675,119 @@
                             </tr>
 
                             @foreach ($petugasGroups as $namaPetugas => $rows)
-                                <tr x-show="open" x-cloak class="bg-slate-50">
+                                <tr x-show="open" x-cloak class="bg-slate-50 hover:bg-slate-100 transition-colors">
 
-                                    <td :colspan="1 + $store.usahaColumns.visibleCount()"
-                                        class="px-5 py-2 pl-10 whitespace-nowrap sticky left-0 z-10 bg-slate-50">
+                                    <td class="px-5 py-3 whitespace-nowrap sticky left-0 z-10 bg-slate-50">
                                         <div class="font-semibold text-slate-600 text-sm">
                                             {{ $namaPetugas }}
                                         </div>
+                                    </td>
 
+                                    <td x-show="$store.usahaColumns.id_wilayah" x-cloak class="px-5 py-3 bg-slate-50">
                                         <div class="text-xs text-slate-400">
                                             {{ $rows->first()->email_petugas ?: '-' }}
                                         </div>
                                     </td>
+
+                                    <td x-show="$store.usahaColumns.kd_kab" x-cloak class="px-5 py-3 bg-slate-50"></td>
+
+                                    <td x-show="$store.usahaColumns.nama_sls" x-cloak class="px-5 py-3 bg-slate-50"></td>
+
+                                    <td x-show="$store.usahaColumns.ub_prelist" x-cloak class="px-5 py-3 text-right font-semibold bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_ub_prelist_awal')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.um_prelist" x-cloak class="px-5 py-3 text-right font-semibold bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_um_prelist_awal')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.umk_prelist" x-cloak class="px-5 py-3 text-right font-semibold bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_umk_prelist_awal')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.usaha_ditemukan_bku" x-cloak class="px-5 py-3 text-right font-semibold text-emerald-600 bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_usaha_ditemukan_bku')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.usaha_ditutup_bku" x-cloak class="px-5 py-3 text-right font-semibold text-red-600 bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_usaha_ditutup_bku')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.usaha_ganda_bku" x-cloak class="px-5 py-3 text-right font-semibold text-amber-600 bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_usaha_ganda_bku')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_bku" x-cloak class="px-5 py-3 text-right font-semibold text-slate-600 bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_usaha_tidak_ditemukan_bku')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.usaha_baru_bku" x-cloak class="px-5 py-3 text-right font-semibold text-blue-600 bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_usaha_baru_bku')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.usaha_ditemukan_keluarga" x-cloak class="px-5 py-3 text-right font-semibold bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_usaha_ditemukan_usaha_keluarga')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.usaha_tutup_keluarga" x-cloak class="px-5 py-3 text-right font-semibold bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_usaha_tutup_usaha_keluarga')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.usaha_ganda_keluarga" x-cloak class="px-5 py-3 text-right font-semibold bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_usaha_ganda_usaha_keluarga')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_keluarga" x-cloak class="px-5 py-3 text-right font-semibold bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_usaha_tidak_ditemukan_usaha_keluarga')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.usaha_baru_keluarga" x-cloak class="px-5 py-3 text-right font-semibold bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_usaha_baru_usaha_keluarga')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.keluarga_ditemukan" x-cloak class="px-5 py-3 text-right font-semibold text-emerald-600 bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_keluarga_ditemukan')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.keluarga_meninggal" x-cloak class="px-5 py-3 text-right font-semibold text-red-600 bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_keluarga_meninggal')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.keluarga_tidak_eligible" x-cloak class="px-5 py-3 text-right font-semibold text-amber-600 bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_keluarga_tidak_eligible')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.keluarga_tidak_ditemui" x-cloak class="px-5 py-3 text-right font-semibold text-orange-600 bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_keluarga_tidak_ditemui')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.keluarga_tidak_ditemukan" x-cloak class="px-5 py-3 text-right font-semibold text-slate-600 bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_keluarga_tidak_ditemukan')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.keluarga_baru" x-cloak class="px-5 py-3 text-right font-semibold text-blue-600 bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_keluarga_baru')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.prelist_usaha" x-cloak class="px-5 py-3 text-right font-semibold bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_prelist_usaha')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.usaha_realisasi" x-cloak class="px-5 py-3 text-right font-semibold text-sky-600 bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_usaha_realisasi')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.prelist_keluarga" x-cloak class="px-5 py-3 text-right font-semibold bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_prelist_keluarga')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.keluarga_realisasi" x-cloak class="px-5 py-3 text-right font-semibold text-emerald-600 bg-slate-50">
+                                        {{ number_format($rows->sum('jumlah_keluarga_realisasi')) }}
+                                    </td>
+
+                                    <td x-show="$store.usahaColumns.ppl" x-cloak class="px-5 py-3 bg-slate-50"></td>
+                                    <td x-show="$store.usahaColumns.pml" x-cloak class="px-5 py-3 bg-slate-50"></td>
+                                    <td x-show="$store.usahaColumns.last_update" x-cloak class="px-5 py-3 bg-slate-50"></td>
 
                                 </tr>
 
