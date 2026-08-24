@@ -324,7 +324,7 @@ class ExportController extends Controller
      */
     private function addKecamatanRecapSheet(Spreadsheet $spreadsheet, string $selectedDate, array $filters, bool $useActiveSheet = false): void
     {
-            // Role yang dipakai buat filter — konsisten dengan index()
+        // Role yang dipakai buat filter — konsisten dengan index()
         $roleForRecap = $filters['petugas_role'] ?: 'pencacah';
 
         // Ambil upload_id TERBARU untuk tanggal & role ini (hindari sum ganda kalau ada >1 upload di hari yang sama)
@@ -796,7 +796,7 @@ class ExportController extends Controller
                 'nama_kecamatan',
             ])
             ->keyBy('petugas_username');
-            
+
 
         $latestUpload = UsahaUpload::query()
             ->orderByDesc('upload_date')
@@ -804,6 +804,86 @@ class ExportController extends Controller
             ->first();
 
         $query = Usaha::query();
+
+        $allowedColumns = [
+            'id_wilayah',
+            'kd_kab',
+            'nama_sls',
+            'ub_prelist',
+            'um_prelist',
+            'umk_prelist',
+            'usaha_ditemukan_bku',
+            'usaha_ditutup_bku',
+            'usaha_ganda_bku',
+            'usaha_tidak_ditemukan_bku',
+            'usaha_baru_bku',
+            'usaha_ditemukan_keluarga',
+            'usaha_tutup_keluarga',
+            'usaha_ganda_keluarga',
+            'usaha_tidak_ditemukan_keluarga',
+            'usaha_baru_keluarga',
+            'keluarga_ditemukan',
+            'keluarga_meninggal',
+            'keluarga_tidak_eligible',
+            'keluarga_tidak_ditemui',
+            'keluarga_tidak_ditemukan',
+            'keluarga_baru',
+            'prelist_usaha',
+            'usaha_realisasi',
+            'prelist_keluarga',
+            'keluarga_realisasi',
+            'ppl',
+            'pml',
+            'last_update',
+        ];
+
+        $selectedColumns = json_decode($request->input('columns', '[]'), true);
+
+        if (!is_array($selectedColumns) || empty($selectedColumns)) {
+            $selectedColumns = $allowedColumns;
+        }
+
+        $selectedColumns = array_values(
+            array_intersect($selectedColumns, $allowedColumns)
+        );
+
+        $columnHeaders = [
+            'id_wilayah' => 'ID Wilayah',
+            'kd_kab' => 'Kode Kabupaten',
+            'nama_sls' => 'Nama SLS',
+
+            'ub_prelist' => 'UB Prelist Awal',
+            'um_prelist' => 'UM Prelist Awal',
+            'umk_prelist' => 'UMK Prelist Awal',
+
+            'usaha_ditemukan_bku' => 'Usaha Ditemukan (BKU)',
+            'usaha_ditutup_bku' => 'Usaha Ditutup (BKU)',
+            'usaha_ganda_bku' => 'Usaha Ganda (BKU)',
+            'usaha_tidak_ditemukan_bku' => 'Usaha Tidak Ditemukan (BKU)',
+            'usaha_baru_bku' => 'Usaha Baru (BKU)',
+
+            'usaha_ditemukan_keluarga' => 'Usaha Ditemukan (Usaha Keluarga)',
+            'usaha_tutup_keluarga' => 'Usaha Tutup (Usaha Keluarga)',
+            'usaha_ganda_keluarga' => 'Usaha Ganda (Usaha Keluarga)',
+            'usaha_tidak_ditemukan_keluarga' => 'Usaha Tidak Ditemukan (Usaha Keluarga)',
+            'usaha_baru_keluarga' => 'Usaha Baru (Usaha Keluarga)',
+
+            'keluarga_ditemukan' => 'Keluarga Ditemukan',
+            'keluarga_meninggal' => 'Keluarga Meninggal',
+            'keluarga_tidak_eligible' => 'Keluarga Tidak Eligible',
+            'keluarga_tidak_ditemui' => 'Keluarga Tidak Dapat Ditemui',
+            'keluarga_tidak_ditemukan' => 'Keluarga Tidak Ditemukan',
+            'keluarga_baru' => 'Keluarga Baru',
+
+            'prelist_usaha' => 'Jumlah Prelist Usaha',
+            'usaha_realisasi' => 'Jumlah Usaha Realisasi',
+            'prelist_keluarga' => 'Jumlah Prelist Keluarga',
+            'keluarga_realisasi' => 'Jumlah Keluarga Realisasi',
+
+            'ppl' => 'PPL',
+            'pml' => 'PML',
+            'last_update' => 'Last Update',
+        ];
 
         if ($latestUpload) {
             $query->where('upload_id', $latestUpload->id);
@@ -943,44 +1023,64 @@ class ExportController extends Controller
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Data Usaha');
 
-        $headers = [
-            '#',
-            'ID Wilayah',
-            'Kode Kabupaten',
-            'Nama SLS',
+        $headers = ['#'];
 
-            'UB Prelist Awal',
-            'UM Prelist Awal',
-            'UMK Prelist Awal',
+        foreach ($selectedColumns as $column) {
+            $headers[] = $columnHeaders[$column];
+        }
 
-            'Usaha Ditemukan (BKU)',
-            'Usaha Ditutup (BKU)',
-            'Usaha Ganda (BKU)',
-            'Usaha Tidak Ditemukan (BKU)',
-            'Usaha Baru (BKU)',
+        $writeSelectedColumns = function ($sheet, $rowIndex, $row) use ($selectedColumns) {
+            $col = 2;
 
-            'Usaha Ditemukan (Usaha Keluarga)',
-            'Usaha Tutup (Usaha Keluarga)',
-            'Usaha Ganda (Usaha Keluarga)',
-            'Usaha Tidak Ditemukan (Usaha Keluarga)',
-            'Usaha Baru (Usaha Keluarga)',
+            foreach ($selectedColumns as $column) {
+                $value = match ($column) {
+                    'id_wilayah' => $row->id_wilayah ?? '',
+                    'kd_kab' => $row->kd_kab ?? '',
+                    'nama_sls' => $row->nama_sls ?? '',
 
-            'Keluarga Ditemukan',
-            'Keluarga Meninggal',
-            'Keluarga Tidak Eligible',
-            'Keluarga Tidak Dapat Ditemui',
-            'Keluarga Tidak Ditemukan',
-            'Keluarga Baru',
+                    'ub_prelist' => $row->jumlah_ub_prelist_awal ?? 0,
+                    'um_prelist' => $row->jumlah_um_prelist_awal ?? 0,
+                    'umk_prelist' => $row->jumlah_umk_prelist_awal ?? 0,
 
-            'Jumlah Prelist Usaha',
-            'Jumlah Usaha Realisasi',
-            'Jumlah Prelist Keluarga',
-            'Jumlah Keluarga Realisasi',
+                    'usaha_ditemukan_bku' => $row->jumlah_usaha_ditemukan_bku ?? 0,
+                    'usaha_ditutup_bku' => $row->jumlah_usaha_ditutup_bku ?? 0,
+                    'usaha_ganda_bku' => $row->jumlah_usaha_ganda_bku ?? 0,
+                    'usaha_tidak_ditemukan_bku' => $row->jumlah_usaha_tidak_ditemukan_bku ?? 0,
+                    'usaha_baru_bku' => $row->jumlah_usaha_baru_bku ?? 0,
 
-            'PPL',
-            'PML',
-            'Last Update',
-        ];
+                    'usaha_ditemukan_keluarga' => $row->jumlah_usaha_ditemukan_usaha_keluarga ?? 0,
+                    'usaha_tutup_keluarga' => $row->jumlah_usaha_tutup_usaha_keluarga ?? 0,
+                    'usaha_ganda_keluarga' => $row->jumlah_usaha_ganda_usaha_keluarga ?? 0,
+                    'usaha_tidak_ditemukan_keluarga' => $row->jumlah_usaha_tidak_ditemukan_usaha_keluarga ?? 0,
+                    'usaha_baru_keluarga' => $row->jumlah_usaha_baru_usaha_keluarga ?? 0,
+
+                    'keluarga_ditemukan' => $row->jumlah_keluarga_ditemukan ?? 0,
+                    'keluarga_meninggal' => $row->jumlah_keluarga_meninggal ?? 0,
+                    'keluarga_tidak_eligible' => $row->jumlah_keluarga_tidak_eligible ?? 0,
+                    'keluarga_tidak_ditemui' => $row->jumlah_keluarga_tidak_ditemui ?? 0,
+                    'keluarga_tidak_ditemukan' => $row->jumlah_keluarga_tidak_ditemukan ?? 0,
+                    'keluarga_baru' => $row->jumlah_keluarga_baru ?? 0,
+
+                    'prelist_usaha' => $row->jumlah_prelist_usaha ?? 0,
+                    'usaha_realisasi' => $row->jumlah_usaha_realisasi ?? 0,
+                    'prelist_keluarga' => $row->jumlah_prelist_keluarga ?? 0,
+                    'keluarga_realisasi' => $row->jumlah_keluarga_realisasi ?? 0,
+
+                    'ppl' => $row->ppl ?? '',
+                    'pml' => $row->pml ?? '',
+                    'last_update' => $row->last_update ?? '',
+
+                    default => '',
+                };
+
+                $sheet->setCellValue(
+                    $this->colLetter($col) . $rowIndex,
+                    $value
+                );
+
+                $col++;
+            }
+        };
 
         foreach ($headers as $index => $header) {
             $column = $this->colLetter($index + 1);
@@ -1008,8 +1108,6 @@ class ExportController extends Controller
 
         $rowIndex = 2;
 
-        $dataRowStart = $rowIndex;
-
         foreach ($dataGrouped as $namaKecamatan => $kecamatan) {
 
             $kecamatanRows = $kecamatan['petugas']->flatMap(function ($petugas) {
@@ -1018,26 +1116,28 @@ class ExportController extends Controller
 
             $firstRow = $kecamatanRows->first();
 
-            $sheet->setCellValue("A{$rowIndex}", $namaKecamatan);
-            $sheet->setCellValue(
-                "B{$rowIndex}",
-                $firstRow->id_wilayah ?? ''
-            );
-            $sheet->setCellValue(
-                "C{$rowIndex}",
-                $firstRow->kd_kab ?? ''
-            );
+            if (!$firstRow) {
+                continue;
+            }
 
-            $col = 5;
+            /*
+     * BARIS KECAMATAN
+     */
+            $kecamatanSummary = clone $firstRow;
 
             foreach ($fields as $field) {
-                $sheet->setCellValue(
-                    $this->colLetter($col) . $rowIndex,
-                    $kecamatan['totals'][$field] ?? 0
-                );
-
-                $col++;
+                $kecamatanSummary->{$field} = $kecamatan['totals'][$field] ?? 0;
             }
+
+            $kecamatanSummary->nama_sls = $namaKecamatan;
+
+            $sheet->setCellValue("A{$rowIndex}", $namaKecamatan);
+
+            $writeSelectedColumns(
+                $sheet,
+                $rowIndex,
+                $kecamatanSummary
+            );
 
             $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")
                 ->getFill()
@@ -1051,32 +1151,33 @@ class ExportController extends Controller
 
             $rowIndex++;
 
+            /*
+     * BARIS PETUGAS
+     */
             foreach ($kecamatan['petugas'] as $namaPetugas => $petugas) {
 
                 $petugasRows = $petugas['rows'];
-
                 $firstPetugasRow = $petugasRows->first();
 
-                $sheet->setCellValue(
-                    "A{$rowIndex}",
-                    $namaPetugas
-                );
+                if (!$firstPetugasRow) {
+                    continue;
+                }
 
-                $sheet->setCellValue(
-                    "B{$rowIndex}",
-                    $firstPetugasRow->ppl ?? ''
-                );
-
-                $col = 5;
+                $petugasSummary = clone $firstPetugasRow;
 
                 foreach ($fields as $field) {
-                    $sheet->setCellValue(
-                        $this->colLetter($col) . $rowIndex,
-                        $petugas['totals'][$field] ?? 0
-                    );
-
-                    $col++;
+                    $petugasSummary->{$field} = $petugas['totals'][$field] ?? 0;
                 }
+
+                $petugasSummary->nama_sls = $namaPetugas;
+
+                $sheet->setCellValue("A{$rowIndex}", $namaPetugas);
+
+                $writeSelectedColumns(
+                    $sheet,
+                    $rowIndex,
+                    $petugasSummary
+                );
 
                 $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")
                     ->getFill()
@@ -1090,6 +1191,9 @@ class ExportController extends Controller
 
                 $rowIndex++;
 
+                /*
+         * DATA DETAIL
+         */
                 foreach ($petugasRows->values() as $index => $row) {
 
                     $sheet->setCellValue(
@@ -1097,45 +1201,10 @@ class ExportController extends Controller
                         $index + 1
                     );
 
-                    $sheet->setCellValue(
-                        "B{$rowIndex}",
-                        $row->id_wilayah ?? '-'
-                    );
-
-                    $sheet->setCellValue(
-                        "C{$rowIndex}",
-                        $row->kd_kab ?? '-'
-                    );
-
-                    $sheet->setCellValue(
-                        "D{$rowIndex}",
-                        $row->nama_sls ?? '-'
-                    );
-
-                    $col = 5;
-
-                    foreach ($fields as $field) {
-                        $sheet->setCellValue(
-                            $this->colLetter($col) . $rowIndex,
-                            $row->{$field} ?? 0
-                        );
-
-                        $col++;
-                    }
-
-                    $sheet->setCellValue(
-                        $this->colLetter(count($headers) - 2) . $rowIndex,
-                        $row->ppl ?? '-'
-                    );
-
-                    $sheet->setCellValue(
-                        $this->colLetter(count($headers) - 1) . $rowIndex,
-                        $row->pml ?? '-'
-                    );
-
-                    $sheet->setCellValue(
-                        $this->colLetter(count($headers)) . $rowIndex,
-                        $row->last_update ?? '-'
+                    $writeSelectedColumns(
+                        $sheet,
+                        $rowIndex,
+                        $row
                     );
 
                     $rowIndex++;
@@ -1143,20 +1212,28 @@ class ExportController extends Controller
             }
         }
 
-        $sheet->setCellValue(
-            "A{$rowIndex}",
-            'TOTAL KESELURUHAN'
-        );
+        /*
+ * TOTAL KESELURUHAN
+ */
+        $grandTotalRow = clone $data->first();
 
-        $col = 5;
+        if ($grandTotalRow) {
+            foreach ($fields as $field) {
+                $grandTotalRow->{$field} = $grandTotals[$field] ?? 0;
+            }
 
-        foreach ($fields as $field) {
+            $grandTotalRow->nama_sls = 'TOTAL KESELURUHAN';
+
             $sheet->setCellValue(
-                $this->colLetter($col) . $rowIndex,
-                $grandTotals[$field] ?? 0
+                "A{$rowIndex}",
+                'TOTAL KESELURUHAN'
             );
 
-            $col++;
+            $writeSelectedColumns(
+                $sheet,
+                $rowIndex,
+                $grandTotalRow
+            );
         }
 
         $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")

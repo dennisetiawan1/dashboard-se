@@ -44,7 +44,9 @@
                 visibleCount() {
                     return this.keys().filter(k => this[k]).length;
                 },
-
+                visibleColumns() {
+                    return this.keys().filter(k => this[k]);
+                },
                 initDraft() {
                     this.keys().forEach(k => this.draft[k] = this[k]);
                 },
@@ -60,6 +62,20 @@
             });
 
             Alpine.store('usahaColumns').initDraft();
+        });
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.querySelector('form[action="{{ route('usaha') }}"]');
+            const exportColumns = document.getElementById('exportColumns');
+
+            if (!form || !exportColumns) return;
+
+            form.addEventListener('submit', function (e) {
+                if (e.submitter?.formAction.includes('{{ route('export.usaha.grouped') }}')) {
+                    exportColumns.value = JSON.stringify(
+                        Alpine.store('usahaColumns').visibleColumns()
+                    );
+                }
+            });
         });
     </script>
 
@@ -1149,6 +1165,7 @@
                 </div>
 
                 <form method="GET" action="{{ route('usaha') }}">
+                    <input type="hidden" name="columns" id="exportColumns">
 
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
 
@@ -1236,6 +1253,7 @@
 
                             <button type="submit"
                                 formaction="{{ route('export.usaha.grouped') }}"
+                                onclick="document.getElementById('export-columns').value = JSON.stringify($store.usahaColumns.keys().filter(k => $store.usahaColumns[k]))"
                                 class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6 h-11 text-sm font-semibold shadow-sm hover:shadow transition">
                                 Export ke Excel
                             </button>
@@ -1277,7 +1295,7 @@
                             </div>
 
                             <p class="text-xs text-slate-400 mt-0.5">
-                                Kolom yang ditampilkan di tabel (tidak memengaruhi hasil export) —
+                                Kolom yang ditampilkan di tabel —
                                 <span x-text="$store.usahaColumns.visibleCount()"></span> dari
                                 <span x-text="$store.usahaColumns.keys().length"></span> kolom aktif
                             </p>
