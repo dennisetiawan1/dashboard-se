@@ -1686,6 +1686,12 @@
                                         </div>
                                     </td>
 
+                                    <td x-show="$store.usahaColumns.id_wilayah" x-cloak class="px-5 py-3 bg-slate-50">
+                                        <div class="text-xs text-slate-400">
+                                            
+                                        </div>
+                                    </td>
+
                                     <td x-show="$store.usahaColumns.kd_kab" x-cloak class="px-5 py-3 bg-slate-50"></td>
 
                                     <td x-show="$store.usahaColumns.nama_sls" x-cloak class="px-5 py-3 bg-slate-50"></td>
