@@ -1213,8 +1213,8 @@ class ExportController extends Controller
         }
 
         /*
- * TOTAL KESELURUHAN
- */
+        * TOTAL KESELURUHAN
+        */
         $grandTotalRow = clone $data->first();
 
         if ($grandTotalRow) {

@@ -712,7 +712,7 @@ class UsahaController extends Controller
             ->orderByDesc('id')
             ->first();
 
-        $previousSums = $this->sumUsahaFieldsForUpload(optional($previousUpload)->id, $fields);
+        $previousSums = $this->sumUsahaFieldsForUpload(optional($previousUpload)->id, $fields, $request);
 
         $summaryComparison = [
             'usaha_ditemukan_bku' => $grandTotals['jumlah_usaha_ditemukan_bku'] - $previousSums['jumlah_usaha_ditemukan_bku'],
@@ -776,37 +776,63 @@ class UsahaController extends Controller
             'kecamatanOptions' => $kecamatanOptions,
         ]);
     }
-    private function sumUsahaFieldsForUpload(?int $uploadId, array $fields): array
-    {
-        if (!$uploadId) {
-            return array_fill_keys($fields, 0);
-        }
-
-        $rows = Usaha::query()
-            ->where('upload_id', $uploadId)
-            ->get()
-            ->groupBy(function ($row) {
-                return implode('|', [
-                    $row->id_wilayah,
-                    $row->kd_kab,
-                    $row->nama_sls,
-                    $row->ppl,
-                    $row->pml,
-                ]);
-            })
-            ->map(function ($group) use ($fields) {
-                $row = clone $group->first();
-                foreach ($fields as $field) {
-                    $row->{$field} = $group->sum($field);
-                }
-                return $row;
-            });
-
-        $sums = [];
-        foreach ($fields as $field) {
-            $sums[$field] = $rows->sum($field);
-        }
-
-        return $sums;
+private function sumUsahaFieldsForUpload(?int $uploadId, array $fields, Request $request): array
+{
+    if (!$uploadId) {
+        return array_fill_keys($fields, 0);
     }
+
+    $query = Usaha::query()->where('upload_id', $uploadId);
+
+    if ($request->filled('kd_kab')) {
+        $query->where('kd_kab', $request->kd_kab);
+    }
+
+    if ($request->filled('nama_sls')) {
+        $query->where('nama_sls', $request->nama_sls);
+    }
+
+    if ($request->filled('ppl')) {
+        $query->where('ppl', $request->ppl);
+    }
+
+    if ($request->filled('pml')) {
+        $query->where('pml', $request->pml);
+    }
+
+    if ($request->filled('nama_kecamatan')) {
+        $usernames = PetugasReference::query()
+            ->where('nama_kecamatan', $request->nama_kecamatan)
+            ->pluck('petugas_username')
+            ->all();
+
+        $query->whereIn('ppl', $usernames);
+    }
+
+    $rows = $query
+        ->get()
+        ->groupBy(function ($row) {
+            return implode('|', [
+                $row->id_wilayah,
+                $row->kd_kab,
+                $row->nama_sls,
+                $row->ppl,
+                $row->pml,
+            ]);
+        })
+        ->map(function ($group) use ($fields) {
+            $row = clone $group->first();
+            foreach ($fields as $field) {
+                $row->{$field} = $group->sum($field);
+            }
+            return $row;
+        });
+
+    $sums = [];
+    foreach ($fields as $field) {
+        $sums[$field] = $rows->sum($field);
+    }
+
+    return $sums;
+}
 }
