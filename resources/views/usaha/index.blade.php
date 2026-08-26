@@ -306,7 +306,7 @@
                     </div>
 
                     <div class="text-xs font-extrabold uppercase tracking-wide text-red-600">
-                        Ditutup
+                        tutup
                     </div>
 
                     <div class="mt-2 text-2xl font-bold text-slate-800">
@@ -1367,7 +1367,7 @@
                         <label class="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ditutup_bku"
                                 class="rounded border-slate-300 text-sky-600">
-                            Usaha Ditutup (BKU)
+                            Usaha tutup (BKU)
                         </label>
 
                         <label class="flex items-center gap-2 cursor-pointer">
@@ -1548,7 +1548,7 @@
                             <th x-show="$store.usahaColumns.usaha_ditemukan_bku" x-cloak
                                 class="text-right px-5 py-4 whitespace-nowrap">Usaha Ditemukan (BKU)</th>
                             <th x-show="$store.usahaColumns.usaha_ditutup_bku" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Usaha Ditutup (BKU)</th>
+                                class="text-right px-5 py-4 whitespace-nowrap">Usaha tutup (BKU)</th>
                             <th x-show="$store.usahaColumns.usaha_ganda_bku" x-cloak
                                 class="text-right px-5 py-4 whitespace-nowrap">Usaha Ganda (BKU)</th>
                             <th x-show="$store.usahaColumns.usaha_tidak_ditemukan_bku" x-cloak
