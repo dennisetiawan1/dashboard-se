@@ -77,6 +77,21 @@
                 }
             });
         });
+            (function () {
+                const url = new URL(window.location.href);
+                const hasFilters = [...url.searchParams.keys()].length > 0;
+
+                if (!hasFilters) return;
+
+                // Deteksi apakah halaman ini dimuat karena RELOAD (F5/Ctrl+R), bukan klik link/submit form
+                const navEntries = performance.getEntriesByType('navigation');
+                const isReload = navEntries.length > 0 && navEntries[0].type === 'reload';
+
+                if (isReload) {
+                    // Buang semua query string, redirect ke URL polos
+                    window.location.replace(url.pathname);
+                }
+            })();
     </script>
 
     <div class="space-y-6">
@@ -1367,7 +1382,7 @@
                         <label class="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ditutup_bku"
                                 class="rounded border-slate-300 text-sky-600">
-                            Usaha tutup (BKU)
+                            Usaha Ditutup (BKU)
                         </label>
 
                         <label class="flex items-center gap-2 cursor-pointer">
@@ -1548,7 +1563,7 @@
                             <th x-show="$store.usahaColumns.usaha_ditemukan_bku" x-cloak
                                 class="text-right px-5 py-4 whitespace-nowrap">Usaha Ditemukan (BKU)</th>
                             <th x-show="$store.usahaColumns.usaha_ditutup_bku" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Usaha tutup (BKU)</th>
+                                class="text-right px-5 py-4 whitespace-nowrap">Usaha Ditutup (BKU)</th>
                             <th x-show="$store.usahaColumns.usaha_ganda_bku" x-cloak
                                 class="text-right px-5 py-4 whitespace-nowrap">Usaha Ganda (BKU)</th>
                             <th x-show="$store.usahaColumns.usaha_tidak_ditemukan_bku" x-cloak
