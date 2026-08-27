@@ -66,22 +66,27 @@ class DashboardController extends Controller
                 ->all();
         }
 
-        $petugasOptions = AssignmentSnapshot::query()
-            ->select('petugas_username', 'petugas_email')
-            ->whereNotNull('petugas_username')
-            ->when($filters['petugas_role'], function ($q, $role) {
-                $q->where('petugas_role', $role);
-            })
-            ->distinct()
-            ->get()
-            ->map(function ($p) use ($referenceMap) {
-                $ref = $referenceMap->get($p->petugas_username);
-                $p->nama_petugas = $ref->nama_petugas ?? null;
+$pplOptions = AssignmentSnapshot::query()
+    ->join(
+        'petugas_references',
+        'petugas_references.petugas_username',
+        '=',
+        'assignment_snapshots.petugas_username'
+    )
+    ->select(
+        'assignment_snapshots.petugas_username',
+        'assignment_snapshots.petugas_email',
+        'petugas_references.nama_petugas'
+    )
+    ->whereNotNull('assignment_snapshots.petugas_username')
+    ->when($filters['petugas_role'], function ($q, $role) {
+        $q->where('assignment_snapshots.petugas_role', $role);
+    })
+    ->distinct()
+    ->orderBy('petugas_references.nama_petugas')
+    ->get();
 
-                return $p;
-            })
-            ->sortBy(fn ($p) => $p->nama_petugas ?: $p->petugas_username)
-            ->values();
+        
 
         $roleOptions = AssignmentSnapshot::query()
             ->whereNotNull('petugas_role')
@@ -432,7 +437,7 @@ class DashboardController extends Controller
             'availableDates' => $availableDates,
             'selectedDate' => $selectedDate,
             'filters' => $filters,
-            'petugasOptions' => $petugasOptions,
+            'pplOptions' => $pplOptions,
             'roleOptions' => $roleOptions,
             'slsOptions' => $slsOptions,
             'kecamatanOptions' => $kecamatanOptions,

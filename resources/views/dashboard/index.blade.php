@@ -86,7 +86,7 @@
 
                         <option value="">Semua Petugas</option>
 
-                        @foreach($petugasOptions as $p)
+                        @foreach($pplOptions as $p)
 
                             <option
                                 value="{{ $p->petugas_username }}"
@@ -808,7 +808,7 @@
     const kecamatanPetugasMap = @json($kecamatanPetugasMap);
     const kecamatanSlsMap = @json($kecamatanSlsMap);
 
-    const allPetugas = @json($petugasOptions->map(fn($p) => ['username' => $p->petugas_username, 'nama' => $p->nama_petugas ?? $p->petugas_username]));
+    const allPetugas = @json($pplOptions->map(fn($p) => ['username' => $p->petugas_username, 'nama' => $p->nama_petugas ?? $p->petugas_username]));
     const allSls = @json($slsOptions);
 
     const selKecamatan = document.querySelector('select[name="nama_kecamatan"]');
