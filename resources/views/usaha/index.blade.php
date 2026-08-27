@@ -4,65 +4,87 @@
 
 @section('content')
     <script>
-        document.addEventListener('alpine:init', () => {
-            Alpine.store('usahaColumns', {
-                id_wilayah: true,
-                kd_kab: true,
-                nama_sls: true,
-                ub_prelist: true,
-                um_prelist: true,
-                umk_prelist: true,
-                usaha_ditemukan_bku: true,
-                usaha_ditutup_bku: true,
-                usaha_ganda_bku: true,
-                usaha_tidak_ditemukan_bku: true,
-                usaha_baru_bku: true,
-                usaha_ditemukan_keluarga: true,
-                usaha_tutup_keluarga: true,
-                usaha_ganda_keluarga: true,
-                usaha_tidak_ditemukan_keluarga: true,
-                usaha_baru_keluarga: true,
-                keluarga_ditemukan: true,
-                keluarga_meninggal: true,
-                keluarga_tidak_eligible: true,
-                keluarga_tidak_ditemui: true,
-                keluarga_tidak_ditemukan: true,
-                keluarga_baru: true,
-                prelist_usaha: true,
-                usaha_realisasi: true,
-                prelist_keluarga: true,
-                keluarga_realisasi: true,
-                ppl: true,
-                pml: true,
-                last_update: true,
+        window.initialUsahaColumnsRaw = @json(request('columns'));
+    document.addEventListener('alpine:init', () => {
+        const defaultColumns = {
+            id_wilayah: true,
+            kd_kab: true,
+            nama_sls: true,
+            ub_prelist: true,
+            um_prelist: true,
+            umk_prelist: true,
+            usaha_ditemukan_bku: true,
+            usaha_ditutup_bku: true,
+            usaha_ganda_bku: true,
+            usaha_tidak_ditemukan_bku: true,
+            usaha_baru_bku: true,
+            usaha_ditemukan_keluarga: true,
+            usaha_tutup_keluarga: true,
+            usaha_ganda_keluarga: true,
+            usaha_tidak_ditemukan_keluarga: true,
+            usaha_baru_keluarga: true,
+            keluarga_ditemukan: true,
+            keluarga_meninggal: true,
+            keluarga_tidak_eligible: true,
+            keluarga_tidak_ditemui: true,
+            keluarga_tidak_ditemukan: true,
+            keluarga_baru: true,
+            prelist_usaha: true,
+            usaha_realisasi: true,
+            prelist_keluarga: true,
+            keluarga_realisasi: true,
+            ppl: true,
+            pml: true,
+            last_update: true,
+        };
 
-                draft: {},
+        let initialColumns = { ...defaultColumns };
 
-                keys() {
-                    return Object.keys(this).filter(k => typeof this[k] === 'boolean');
-                },
-                visibleCount() {
-                    return this.keys().filter(k => this[k]).length;
-                },
-                visibleColumns() {
-                    return this.keys().filter(k => this[k]);
-                },
-                initDraft() {
-                    this.keys().forEach(k => this.draft[k] = this[k]);
-                },
-                draftShowAll() {
-                    this.keys().forEach(k => this.draft[k] = true);
-                },
-                draftHideAll() {
-                    this.keys().forEach(k => this.draft[k] = false);
-                },
-                applyDraft() {
-                    this.keys().forEach(k => this[k] = this.draft[k]);
+        // Kalau URL bawa parameter "columns" (hasil submit filter sebelumnya), pakai itu
+        if (window.initialUsahaColumnsRaw) {
+            try {
+                const activeList = JSON.parse(window.initialUsahaColumnsRaw);
+                if (Array.isArray(activeList)) {
+                    Object.keys(defaultColumns).forEach(k => {
+                        initialColumns[k] = activeList.includes(k);
+                    });
                 }
-            });
+            } catch (e) {
+                // biarkan default kalau parsing gagal
+            }
+        }
 
-            Alpine.store('usahaColumns').initDraft();
+        Alpine.store('usahaColumns', {
+            ...initialColumns,
+
+            draft: {},
+
+            keys() {
+                return Object.keys(defaultColumns);
+            },
+            visibleCount() {
+                return this.keys().filter(k => this[k]).length;
+            },
+            visibleColumns() {
+                return this.keys().filter(k => this[k]);
+            },
+            initDraft() {
+                this.keys().forEach(k => this.draft[k] = this[k]);
+            },
+            draftShowAll() {
+                this.keys().forEach(k => this.draft[k] = true);
+            },
+            draftHideAll() {
+                this.keys().forEach(k => this.draft[k] = false);
+            },
+            applyDraft() {
+                this.keys().forEach(k => this[k] = this.draft[k]);
+            }
         });
+
+        Alpine.store('usahaColumns').initDraft();
+    });
+
         document.addEventListener('DOMContentLoaded', () => {
             const form = document.querySelector('form[action="{{ route('usaha') }}"]');
             const exportColumns = document.getElementById('exportColumns');
@@ -77,21 +99,20 @@
                 }
             });
         });
-            (function () {
-                const url = new URL(window.location.href);
-                const hasFilters = [...url.searchParams.keys()].length > 0;
 
-                if (!hasFilters) return;
+        (function () {
+            const url = new URL(window.location.href);
+            const hasFilters = [...url.searchParams.keys()].length > 0;
 
-                // Deteksi apakah halaman ini dimuat karena RELOAD (F5/Ctrl+R), bukan klik link/submit form
-                const navEntries = performance.getEntriesByType('navigation');
-                const isReload = navEntries.length > 0 && navEntries[0].type === 'reload';
+            if (!hasFilters) return;
 
-                if (isReload) {
-                    // Buang semua query string, redirect ke URL polos
-                    window.location.replace(url.pathname);
-                }
-            })();
+            const navEntries = performance.getEntriesByType('navigation');
+            const isReload = navEntries.length > 0 && navEntries[0].type === 'reload';
+
+            if (isReload) {
+                window.location.replace(url.pathname);
+            }
+        })();
     </script>
 
     <div class="space-y-6">
@@ -1164,24 +1185,33 @@
 
         </div>
         
-        {{-- ================= EXPORT & FILTER DATA USAHA ================= --}}
+        {{-- ================= FILTER & EXPORT DATA USAHA (GABUNGAN) ================= --}}
         <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
 
-            {{-- Header + Form Export --}}
             <div class="p-6">
 
-                <div class="mb-5">
-                    <h3 class="text-lg font-semibold text-slate-800">
-                        Export Data Usaha
-                    </h3>
-                    <p class="text-sm text-slate-500 mt-1">
-                        Pilih filter di bawah (opsional), lalu export ke Excel.
-                    </p>
+                <div class="mb-5 flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-semibold text-slate-800">
+                            Filter & Export Data Usaha
+                        </h3>
+                        <p class="text-sm text-slate-500 mt-1">
+                            Atur filter data dan kolom yang ditampilkan, lalu terapkan sekaligus.
+                        </p>
+                    </div>
+
+                    @if(request()->anyFilled(['nama_kecamatan', 'kd_kab', 'ppl', 'pml']))
+                        <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-sky-100 text-sky-700">
+                            Filter Aktif
+                        </span>
+                    @endif
                 </div>
 
-                <form method="GET" action="{{ route('usaha') }}">
+                <form method="GET" action="{{ route('usaha') }}" x-data
+                    @submit="$store.usahaColumns.applyDraft()">
                     <input type="hidden" name="columns" id="exportColumns">
 
+                    {{-- ===== BAGIAN 1: FILTER DATA ===== --}}
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
 
                         <div>
@@ -1247,28 +1277,249 @@
 
                     </div>
 
+                    {{-- ===== BAGIAN 2: FILTER KOLOM (collapsible di dalam form yang sama) ===== --}}
+                    <div x-data="{ showColumns: false }" class="mt-5 pt-4 border-t border-slate-100">
+
+                    <button type="button" @click="showColumns = !showColumns; if (showColumns) $store.usahaColumns.initDraft()" class="w-full flex items-center justify-between text-left">
+
+                        <div class="flex items-center gap-2">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-semibold text-slate-700">Kolom Tabel</span>
+                                    <span x-show="$store.usahaColumns.visibleCount() < $store.usahaColumns.keys().length" x-cloak
+                                        class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">
+                                        <span x-text="$store.usahaColumns.visibleCount()"></span> / <span x-text="$store.usahaColumns.keys().length"></span> aktif
+                                    </span>
+                                </div>
+
+                                <p class="text-xs text-slate-400 mt-0.5">
+                                    Kolom yang ditampilkan di tabel —
+                                    <span x-text="$store.usahaColumns.visibleCount()"></span> dari
+                                    <span x-text="$store.usahaColumns.keys().length"></span> kolom aktif
+                                </p>
+                            </div>
+                        </div>
+
+                        <span x-text="showColumns ? '▾' : '▸'" class="text-slate-400 text-lg"></span>
+                    </button>
+                    
+                        <div x-show="showColumns" x-cloak class="pt-4">
+
+                            <div class="flex gap-2 mb-4">
+                                <button type="button" @click="$store.usahaColumns.draftShowAll()"
+                                    class="text-xs font-medium px-3 py-1.5 rounded-lg bg-sky-50 text-sky-600 hover:bg-sky-100 transition">
+                                    Tampilkan Semua
+                                </button>
+                                <button type="button" @click="$store.usahaColumns.draftHideAll()"
+                                    class="text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+                                    Sembunyikan Semua
+                                </button>
+                            </div>
+
+                            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-2 text-sm text-slate-600">
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.id_wilayah"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    ID Wilayah
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.kd_kab"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Kode Kabupaten
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.nama_sls"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Nama SLS
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.ub_prelist"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    UB Prelist Awal
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.um_prelist"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    UM Prelist Awal
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.umk_prelist"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    UMK Prelist Awal
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ditemukan_bku"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Usaha Ditemukan (BKU)
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ditutup_bku"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Usaha Ditutup (BKU)
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ganda_bku"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Usaha Ganda (BKU)
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_tidak_ditemukan_bku"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Usaha Tidak Ditemukan (BKU)
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_baru_bku"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Usaha Baru (BKU)
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ditemukan_keluarga"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Usaha Ditemukan (Keluarga)
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_tutup_keluarga"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Usaha Tutup (Keluarga)
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ganda_keluarga"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Usaha Ganda (Keluarga)
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_tidak_ditemukan_keluarga"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Usaha Tidak Ditemukan (Keluarga)
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_baru_keluarga"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Usaha Baru (Keluarga)
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_ditemukan"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Keluarga Ditemukan
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_meninggal"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Keluarga Meninggal
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_tidak_eligible"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Keluarga Tidak Eligible
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_tidak_ditemui"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Keluarga Tidak Dapat Ditemui
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_tidak_ditemukan"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Keluarga Tidak Ditemukan
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_baru"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Keluarga Baru
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.prelist_usaha"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Jumlah Prelist Usaha
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_realisasi"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Jumlah Usaha Realisasi
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.prelist_keluarga"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Jumlah Prelist Keluarga
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_realisasi"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Jumlah Keluarga Realisasi
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.ppl"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    PPL
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.pml"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    PML
+                                </label>
+
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="$store.usahaColumns.draft.last_update"
+                                        class="rounded border-slate-300 text-sky-600">
+                                    Last Update
+                                </label>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    {{-- ===== SATU TOMBOL UNTUK KEDUANYA ===== --}}
                     <div class="flex items-center justify-between mt-5 pt-4 border-t border-slate-100">
 
-                        <p class="text-xs text-slate-400">
-                            
-                        </p>
-
-                        <div class="flex gap-3">
+                        <div>
                             @if(request()->anyFilled(['nama_kecamatan', 'kd_kab', 'ppl', 'pml']))
                                 <a href="{{ route('usaha') }}"
-                                    class="rounded-xl px-5 h-11 flex items-center text-sm font-semibold text-slate-500 hover:text-slate-700 transition">
-                                    Reset
+                                    class="text-sm font-semibold text-slate-500 hover:text-slate-700 transition">
+                                    Reset Semua Filter
                                 </a>
                             @endif
+                        </div>
 
+                        <div class="flex gap-3">
                             <button type="submit"
+                                onclick="Alpine.store('usahaColumns').applyDraft(); document.getElementById('exportColumns').value = JSON.stringify(Alpine.store('usahaColumns').visibleColumns())"
                                 class="bg-sky-600 hover:bg-sky-700 text-white rounded-xl px-6 h-11 text-sm font-semibold shadow-sm hover:shadow transition">
-                                Filter
+                                Terapkan Filter
                             </button>
 
                             <button type="submit"
                                 formaction="{{ route('export.usaha.grouped') }}"
-                                onclick="document.getElementById('export-columns').value = JSON.stringify($store.usahaColumns.keys().filter(k => $store.usahaColumns[k]))"
+                                onclick="document.getElementById('exportColumns').value = JSON.stringify($store.usahaColumns.visibleColumns())"
                                 class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6 h-11 text-sm font-semibold shadow-sm hover:shadow transition">
                                 Export ke Excel
                             </button>
@@ -1277,250 +1528,6 @@
                     </div>
 
                 </form>
-
-            </div>
-
-            {{-- Filter Kolom (collapsible, terpisah dari filter export) --}}
-            <div x-data="{ showFilter: false }" :class="showFilter ? 'ring-1 ring-sky-200' : ''"
-                class="border-t border-slate-100 transition">
-
-                <button @click="showFilter = !showFilter; if (showFilter) $store.usahaColumns.initDraft()"
-                    class="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-slate-50 transition">
-
-                    <div class="flex items-center gap-3">
-
-                        <span class="flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 text-sky-600 shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 4h18M6 8h12M10 12h4M11 16h2" />
-                            </svg>
-                        </span>
-
-                        <div>
-                            <div class="flex items-center gap-2">
-                                <h3 class="text-sm font-semibold text-slate-700">
-                                    Filter Kolom Tabel
-                                </h3>
-
-                                <span x-show="$store.usahaColumns.visibleCount() < $store.usahaColumns.keys().length"
-                                    x-cloak
-                                    class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">
-                                    Aktif
-                                </span>
-                            </div>
-
-                            <p class="text-xs text-slate-400 mt-0.5">
-                                Kolom yang ditampilkan di tabel —
-                                <span x-text="$store.usahaColumns.visibleCount()"></span> dari
-                                <span x-text="$store.usahaColumns.keys().length"></span> kolom aktif
-                            </p>
-                        </div>
-
-                    </div>
-
-                    <span x-text="showFilter ? '▾' : '▸'" class="text-slate-400 text-lg"></span>
-
-                </button>
-
-                <div x-show="showFilter" x-cloak class="px-6 pb-5 border-t border-slate-100 pt-4">
-
-                    <div class="flex gap-2 mb-4">
-                        <button @click="$store.usahaColumns.draftShowAll()"
-                            class="text-xs font-medium px-3 py-1.5 rounded-lg bg-sky-50 text-sky-600 hover:bg-sky-100 transition">
-                            Tampilkan Semua
-                        </button>
-                        <button @click="$store.usahaColumns.draftHideAll()"
-                            class="text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
-                            Sembunyikan Semua
-                        </button>
-                    </div>
-
-                    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-2 text-sm text-slate-600">
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.id_wilayah"
-                                class="rounded border-slate-300 text-sky-600">
-                            ID Wilayah
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.kd_kab"
-                                class="rounded border-slate-300 text-sky-600">
-                            Kode Kabupaten
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.nama_sls"
-                                class="rounded border-slate-300 text-sky-600">
-                            Nama SLS
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.ub_prelist"
-                                class="rounded border-slate-300 text-sky-600">
-                            UB Prelist Awal
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.um_prelist"
-                                class="rounded border-slate-300 text-sky-600">
-                            UM Prelist Awal
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.umk_prelist"
-                                class="rounded border-slate-300 text-sky-600">
-                            UMK Prelist Awal
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ditemukan_bku"
-                                class="rounded border-slate-300 text-sky-600">
-                            Usaha Ditemukan (BKU)
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ditutup_bku"
-                                class="rounded border-slate-300 text-sky-600">
-                            Usaha Ditutup (BKU)
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ganda_bku"
-                                class="rounded border-slate-300 text-sky-600">
-                            Usaha Ganda (BKU)
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_tidak_ditemukan_bku"
-                                class="rounded border-slate-300 text-sky-600">
-                            Usaha Tidak Ditemukan (BKU)
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_baru_bku"
-                                class="rounded border-slate-300 text-sky-600">
-                            Usaha Baru (BKU)
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ditemukan_keluarga"
-                                class="rounded border-slate-300 text-sky-600">
-                            Usaha Ditemukan (Keluarga)
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_tutup_keluarga"
-                                class="rounded border-slate-300 text-sky-600">
-                            Usaha Tutup (Keluarga)
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ganda_keluarga"
-                                class="rounded border-slate-300 text-sky-600">
-                            Usaha Ganda (Keluarga)
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_tidak_ditemukan_keluarga"
-                                class="rounded border-slate-300 text-sky-600">
-                            Usaha Tidak Ditemukan (Keluarga)
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_baru_keluarga"
-                                class="rounded border-slate-300 text-sky-600">
-                            Usaha Baru (Keluarga)
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_ditemukan"
-                                class="rounded border-slate-300 text-sky-600">
-                            Keluarga Ditemukan
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_meninggal"
-                                class="rounded border-slate-300 text-sky-600">
-                            Keluarga Meninggal
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_tidak_eligible"
-                                class="rounded border-slate-300 text-sky-600">
-                            Keluarga Tidak Eligible
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_tidak_ditemui"
-                                class="rounded border-slate-300 text-sky-600">
-                            Keluarga Tidak Dapat Ditemui
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_tidak_ditemukan"
-                                class="rounded border-slate-300 text-sky-600">
-                            Keluarga Tidak Ditemukan
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_baru"
-                                class="rounded border-slate-300 text-sky-600">
-                            Keluarga Baru
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.prelist_usaha"
-                                class="rounded border-slate-300 text-sky-600">
-                            Jumlah Prelist Usaha
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_realisasi"
-                                class="rounded border-slate-300 text-sky-600">
-                            Jumlah Usaha Realisasi
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.prelist_keluarga"
-                                class="rounded border-slate-300 text-sky-600">
-                            Jumlah Prelist Keluarga
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_realisasi"
-                                class="rounded border-slate-300 text-sky-600">
-                            Jumlah Keluarga Realisasi
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.ppl"
-                                class="rounded border-slate-300 text-sky-600">
-                            PPL
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.pml"
-                                class="rounded border-slate-300 text-sky-600">
-                            PML
-                        </label>
-
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="$store.usahaColumns.draft.last_update"
-                                class="rounded border-slate-300 text-sky-600">
-                            Last Update
-                        </label>
-
-                    </div>
-
-                    <div class="flex justify-end mt-5 pt-4 border-t border-slate-100">
-                        <button @click="$store.usahaColumns.applyDraft(); showFilter = false"
-                            class="text-xs font-semibold px-4 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700 transition">
-                            Terapkan Filter
-                        </button>
-                    </div>
-
-                </div>
 
             </div>
 
