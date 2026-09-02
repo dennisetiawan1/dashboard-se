@@ -12,6 +12,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use App\Models\Usaha;
 use App\Models\UsahaUpload;
+use App\Models\DesaReference;
 
 class ExportController extends Controller
 {
@@ -600,7 +601,20 @@ class ExportController extends Controller
     }
     public function exportUsaha()
     {
+        if (request()->filled('tanggal')) {
+            $latestUpload = UsahaUpload::query()
+                ->where('upload_date', request('tanggal'))
+                ->orderByDesc('id')
+                ->first();
+        } else {
+            $latestUpload = UsahaUpload::query()
+                ->orderByDesc('upload_date')
+                ->orderByDesc('id')
+                ->first();
+        }
+
         $data = Usaha::query()
+            ->when($latestUpload, fn($q) => $q->where('upload_id', $latestUpload->id))
             ->get()
             ->groupBy(function ($row) {
                 return implode('|', [
@@ -788,22 +802,31 @@ class ExportController extends Controller
 
     public function exportUsahaGrouped(Request $request)
     {
-        $referenceMap = PetugasReference::query()
-            ->get([
-                'petugas_username',
-                'nama_petugas',
-                'kode_kecamatan',
-                'nama_kecamatan',
-            ])
-            ->keyBy('petugas_username');
+            $referenceMap = PetugasReference::query()
+                ->get(['petugas_username', 'nama_petugas', 'kode_kecamatan', 'nama_kecamatan'])
+                ->keyBy('petugas_username');
 
+            $desaReferenceMap = DesaReference::query()
+                ->get(['id_wilayah', 'nama_desa'])
+                ->keyBy('id_wilayah');
 
-        $latestUpload = UsahaUpload::query()
-            ->orderByDesc('upload_date')
-            ->orderByDesc('id')
-            ->first();
+            if (request()->filled('tanggal')) {
+                $latestUpload = UsahaUpload::query()
+                    ->where('upload_date', request('tanggal'))
+                    ->orderByDesc('id')
+                    ->first();
+            } else {
+                $latestUpload = UsahaUpload::query()
+                    ->orderByDesc('upload_date')
+                    ->orderByDesc('id')
+                    ->first();
+            }
 
-        $query = Usaha::query();
+            $query = Usaha::query();
+
+            if ($latestUpload) {
+                $query->where('upload_id', $latestUpload->id);
+            }
 
         $allowedColumns = [
             'id_wilayah',
@@ -954,7 +977,7 @@ class ExportController extends Controller
                     $row->pml,
                 ]);
             })
-            ->map(function ($rows) use ($referenceMap, $fields) {
+            ->map(function ($rows) use ($referenceMap, $desaReferenceMap, $fields) {
 
                 $row = clone $rows->first();
 
@@ -964,53 +987,72 @@ class ExportController extends Controller
 
                 $ref = $referenceMap->get($row->ppl);
 
-                $row->nama_petugas = $ref->nama_petugas ?? null;
-                $row->email_petugas = $ref->petugas_username ?? null;
+                $row->nama_petugas   = $ref->nama_petugas ?? null;
+                $row->email_petugas  = $ref->petugas_username ?? null;
                 $row->kode_kecamatan = $ref->kode_kecamatan ?? null;
                 $row->nama_kecamatan = $ref->nama_kecamatan ?? null;
+
+                $desaRef = $desaReferenceMap->get($row->id_wilayah);
+                $row->nama_desa = $desaRef->nama_desa ?? 'Tanpa Desa';
 
                 return $row;
             })
             ->sortBy('nama_sls')
             ->values();
 
-        $dataGrouped = $data
-            ->groupBy(function ($row) {
-                return $row->nama_kecamatan ?: 'Tanpa Kecamatan';
-            })
-            ->map(function ($rowsByKecamatan) use ($fields) {
+            $dataGrouped = $data
+                ->groupBy(function ($row) {
+                    return $row->nama_kecamatan ?: 'Tanpa Kecamatan';
+                })
+                ->map(function ($rowsByKecamatan) use ($fields) {
 
-                $totals = [];
+                    $kecamatanTotals = [];
+                    foreach ($fields as $field) {
+                        $kecamatanTotals[$field] = $rowsByKecamatan->sum($field);
+                    }
 
-                foreach ($fields as $field) {
-                    $totals[$field] = $rowsByKecamatan->sum($field);
-                }
+                    $desaGroups = $rowsByKecamatan
+                        ->groupBy(function ($row) {
+                            return $row->nama_desa ?: 'Tanpa Desa';
+                        })
+                        ->map(function ($rowsByDesa) use ($fields) {
 
-                $petugas = $rowsByKecamatan
-                    ->groupBy(function ($row) {
-                        return $row->nama_petugas
-                            ?: ($row->ppl ?: 'Tanpa Petugas');
-                    })
-                    ->map(function ($rowsByPetugas) use ($fields) {
+                            $desaTotals = [];
+                            foreach ($fields as $field) {
+                                $desaTotals[$field] = $rowsByDesa->sum($field);
+                            }
 
-                        $petugasTotals = [];
+                            $petugas = $rowsByDesa
+                                ->groupBy(function ($row) {
+                                    return $row->nama_petugas
+                                        ?: ($row->ppl ?: 'Tanpa Petugas');
+                                })
+                                ->map(function ($rowsByPetugas) use ($fields) {
 
-                        foreach ($fields as $field) {
-                            $petugasTotals[$field] = $rowsByPetugas->sum($field);
-                        }
+                                    $petugasTotals = [];
+                                    foreach ($fields as $field) {
+                                        $petugasTotals[$field] = $rowsByPetugas->sum($field);
+                                    }
 
-                        return [
-                            'rows' => $rowsByPetugas,
-                            'totals' => $petugasTotals,
-                        ];
-                    });
+                                    return [
+                                        'rows'   => $rowsByPetugas,
+                                        'totals' => $petugasTotals,
+                                    ];
+                                });
 
-                return [
-                    'totals' => $totals,
-                    'petugas' => $petugas,
-                ];
-            })
-            ->sortKeys();
+                            return [
+                                'totals'  => $desaTotals,
+                                'petugas' => $petugas,
+                            ];
+                        })
+                        ->sortKeys();
+
+                    return [
+                        'totals' => $kecamatanTotals,
+                        'desa'   => $desaGroups,
+                    ];
+                })
+                ->sortKeys();
 
         $grandTotals = [];
 
@@ -1110,8 +1152,10 @@ class ExportController extends Controller
 
         foreach ($dataGrouped as $namaKecamatan => $kecamatan) {
 
-            $kecamatanRows = $kecamatan['petugas']->flatMap(function ($petugas) {
-                return $petugas['rows'];
+            $kecamatanRows = $kecamatan['desa']->flatMap(function ($desa) {
+                return $desa['petugas']->flatMap(function ($petugas) {
+                    return $petugas['rows'];
+                });
             });
 
             $firstRow = $kecamatanRows->first();
@@ -1121,8 +1165,8 @@ class ExportController extends Controller
             }
 
             /*
-     * BARIS KECAMATAN
-     */
+            * BARIS KECAMATAN
+            */
             $kecamatanSummary = clone $firstRow;
 
             foreach ($fields as $field) {
@@ -1132,82 +1176,85 @@ class ExportController extends Controller
             $kecamatanSummary->nama_sls = $namaKecamatan;
 
             $sheet->setCellValue("A{$rowIndex}", $namaKecamatan);
-
-            $writeSelectedColumns(
-                $sheet,
-                $rowIndex,
-                $kecamatanSummary
-            );
+            $writeSelectedColumns($sheet, $rowIndex, $kecamatanSummary);
 
             $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")
-                ->getFill()
-                ->setFillType(Fill::FILL_SOLID)
-                ->getStartColor()
-                ->setRGB('E2E8F0');
-
-            $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")
-                ->getFont()
-                ->setBold(true);
+                ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('E2E8F0');
+            $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")->getFont()->setBold(true);
 
             $rowIndex++;
 
             /*
-     * BARIS PETUGAS
-     */
-            foreach ($kecamatan['petugas'] as $namaPetugas => $petugas) {
+            * BARIS DESA
+            */
+            foreach ($kecamatan['desa'] as $namaDesa => $desa) {
 
-                $petugasRows = $petugas['rows'];
-                $firstPetugasRow = $petugasRows->first();
+                $desaRows = $desa['petugas']->flatMap(function ($petugas) {
+                    return $petugas['rows'];
+                });
 
-                if (!$firstPetugasRow) {
+                $firstDesaRow = $desaRows->first();
+
+                if (!$firstDesaRow) {
                     continue;
                 }
 
-                $petugasSummary = clone $firstPetugasRow;
+                $desaSummary = clone $firstDesaRow;
 
                 foreach ($fields as $field) {
-                    $petugasSummary->{$field} = $petugas['totals'][$field] ?? 0;
+                    $desaSummary->{$field} = $desa['totals'][$field] ?? 0;
                 }
 
-                $petugasSummary->nama_sls = $namaPetugas;
+                $desaSummary->nama_sls = $namaDesa;
 
-                $sheet->setCellValue("A{$rowIndex}", $namaPetugas);
-
-                $writeSelectedColumns(
-                    $sheet,
-                    $rowIndex,
-                    $petugasSummary
-                );
+                $sheet->setCellValue("A{$rowIndex}", '  ' . $namaDesa);
+                $writeSelectedColumns($sheet, $rowIndex, $desaSummary);
 
                 $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")
-                    ->getFill()
-                    ->setFillType(Fill::FILL_SOLID)
-                    ->getStartColor()
-                    ->setRGB('F1F5F9');
-
-                $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")
-                    ->getFont()
-                    ->setBold(true);
+                    ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('E9EFF5');
+                $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")->getFont()->setBold(true);
 
                 $rowIndex++;
 
                 /*
-         * DATA DETAIL
-         */
-                foreach ($petugasRows->values() as $index => $row) {
+                * BARIS PETUGAS
+                */
+                foreach ($desa['petugas'] as $namaPetugas => $petugas) {
 
-                    $sheet->setCellValue(
-                        "A{$rowIndex}",
-                        $index + 1
-                    );
+                    $petugasRows = $petugas['rows'];
+                    $firstPetugasRow = $petugasRows->first();
 
-                    $writeSelectedColumns(
-                        $sheet,
-                        $rowIndex,
-                        $row
-                    );
+                    if (!$firstPetugasRow) {
+                        continue;
+                    }
+
+                    $petugasSummary = clone $firstPetugasRow;
+
+                    foreach ($fields as $field) {
+                        $petugasSummary->{$field} = $petugas['totals'][$field] ?? 0;
+                    }
+
+                    $petugasSummary->nama_sls = $namaPetugas;
+
+                    $sheet->setCellValue("A{$rowIndex}", '    ' . $namaPetugas);
+                    $writeSelectedColumns($sheet, $rowIndex, $petugasSummary);
+
+                    $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")
+                        ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F1F5F9');
+                    $sheet->getStyle("A{$rowIndex}:{$lastCol}{$rowIndex}")->getFont()->setBold(true);
 
                     $rowIndex++;
+
+                    /*
+                    * DATA DETAIL
+                    */
+                    foreach ($petugasRows->values() as $index => $row) {
+
+                        $sheet->setCellValue("A{$rowIndex}", $index + 1);
+                        $writeSelectedColumns($sheet, $rowIndex, $row);
+
+                        $rowIndex++;
+                    }
                 }
             }
         }
