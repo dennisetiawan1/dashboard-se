@@ -2,18 +2,21 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Usaha;
 use App\Models\PetugasReference;
+use App\Models\Usaha;
 use App\Models\UsahaUpload;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use App\Models\DesaReference;
+use App\Models\KecamatanWilkerStat;
 
 class UsahaController extends Controller
 {
     public function index(Request $request)
     {
-        //  REFERENCE PETUGAS
-
+            
+        //  REFERENCE PETUGAS & DESA
         $referenceMap = PetugasReference::query()
             ->get([
                 'petugas_username',
@@ -23,7 +26,26 @@ class UsahaController extends Controller
             ])
             ->keyBy('petugas_username');
 
-            /* FILTER OPTIONS - KECAMATAN */
+        $desaReferenceMap = DesaReference::query()
+            ->get([
+                'id_wilayah',
+                'nama_desa',
+            ])
+            ->keyBy('id_wilayah');
+
+        // Ambil data wilker stat
+       $wilkerStatMap = KecamatanWilkerStat::query()
+            ->get([
+                'kecamatan',
+                'bku_wilkerstat',
+                'st_2023'
+            ])
+            ->keyBy('kecamatan');
+
+        $totalWilkerStat = KecamatanWilkerStat::sum('bku_wilkerstat');
+        $totalST2023 = KecamatanWilkerStat::sum('st_2023');
+
+        /* FILTER OPTIONS - KECAMATAN */
         $kecamatanOptions = PetugasReference::query()
             ->whereNotNull('nama_kecamatan')
             ->where('nama_kecamatan', '!=', '')
@@ -31,14 +53,29 @@ class UsahaController extends Controller
             ->orderBy('nama_kecamatan')
             ->pluck('nama_kecamatan');
 
-        //  AMBIL UPLOAD TERBARU
-
-        $latestUpload = UsahaUpload::query()
+        // Daftar tanggal upload yang tersedia, untuk dropdown filter tanggal
+        $availableUploadDates = UsahaUpload::query()
             ->orderByDesc('upload_date')
-            ->orderByDesc('id')
-            ->first();
+            ->get()
+            ->pluck('upload_date')
+            ->map(fn($d) => Carbon::parse($d)->format('Y-m-d'))
+            ->unique()
+            ->values();
 
-         // QUERY USAHA (HANYA UPLOAD TERBARU)
+        // AMBIL UPLOAD SESUAI TANGGAL DIPILIH (atau upload terbaru kalau tidak ada filter tanggal)
+        if ($request->filled('tanggal')) {
+            $latestUpload = UsahaUpload::query()
+                ->where('upload_date', $request->tanggal)
+                ->orderByDesc('id')
+                ->first();
+        } else {
+            $latestUpload = UsahaUpload::query()
+                ->orderByDesc('upload_date')
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        // QUERY USAHA (HANYA UPLOAD TERPILIH)
 
         $query = Usaha::query();
 
@@ -71,7 +108,7 @@ class UsahaController extends Controller
             $query->where('pml', $request->pml);
         }
 
-                /* FILTER KECAMATAN */
+        /* FILTER KECAMATAN */
         if ($request->filled('nama_kecamatan')) {
             $usernames = PetugasReference::query()
                 ->where('nama_kecamatan', $request->nama_kecamatan)
@@ -82,7 +119,6 @@ class UsahaController extends Controller
         }
 
         //  DATA USAHA
-
         $data = $query
             ->get()
             ->groupBy(function ($row) {
@@ -94,7 +130,7 @@ class UsahaController extends Controller
                     $row->pml,
                 ]);
             })
-            ->map(function ($rows) use ($referenceMap) {
+            ->map(function ($rows) use ($referenceMap, $desaReferenceMap) {
 
                 $row = clone $rows->first();
 
@@ -170,24 +206,19 @@ class UsahaController extends Controller
 
                 $ref = $referenceMap->get($row->ppl);
 
-                $row->nama_petugas =
-                    $ref->nama_petugas ?? null;
+                $row->nama_petugas    = $ref->nama_petugas ?? null;
+                $row->email_petugas   = $ref->petugas_username ?? null;
+                $row->kode_kecamatan  = $ref->kode_kecamatan ?? null;
+                $row->nama_kecamatan  = $ref->nama_kecamatan ?? null;
 
-                $row->email_petugas =
-                    $ref->petugas_username ?? null;
+                $desaRef = $desaReferenceMap->get($row->id_wilayah);
 
-                $row->kode_kecamatan =
-                    $ref->kode_kecamatan ?? null;
-
-                $row->nama_kecamatan =
-                    $ref->nama_kecamatan ?? null;
-
+                $row->nama_desa = $desaRef->nama_desa ?? 'Tanpa Desa';
 
                 return $row;
             })
             ->sortBy('nama_sls')
             ->values();
-
 
         /*        | SUMMARY AKUMULASI        | Karena $data mengambil seluruh record Usaha, maka sum() otomatis menjumlahkan semua upload.        */
 
@@ -395,59 +426,76 @@ class UsahaController extends Controller
             ->groupBy('usaha.ppl', 'usaha_uploads.upload_date')
             ->get();
 
-        //  KELOMPOKKAN DATA USAHA: KECAMATAN -> PETUGAS
+        //  KELOMPOKKAN DATA USAHA: KECAMATAN -> DESA -> PETUGAS
+
+        $fields = [
+            'jumlah_ub_prelist_awal',
+            'jumlah_um_prelist_awal',
+            'jumlah_umk_prelist_awal',
+
+            'jumlah_usaha_ditemukan_bku',
+            'jumlah_usaha_ditutup_bku',
+            'jumlah_usaha_ganda_bku',
+            'jumlah_usaha_tidak_ditemukan_bku',
+            'jumlah_usaha_baru_bku',
+
+            'jumlah_usaha_ditemukan_usaha_keluarga',
+            'jumlah_usaha_tutup_usaha_keluarga',
+            'jumlah_usaha_ganda_usaha_keluarga',
+            'jumlah_usaha_tidak_ditemukan_usaha_keluarga',
+            'jumlah_usaha_baru_usaha_keluarga',
+
+            'jumlah_keluarga_ditemukan',
+            'jumlah_keluarga_meninggal',
+            'jumlah_keluarga_tidak_eligible',
+            'jumlah_keluarga_tidak_ditemui',
+            'jumlah_keluarga_tidak_ditemukan',
+            'jumlah_keluarga_baru',
+
+            'jumlah_prelist_usaha',
+            'jumlah_usaha_realisasi',
+            'jumlah_prelist_keluarga',
+            'jumlah_keluarga_realisasi',
+        ];
 
         $dataGrouped = $data
             ->groupBy(function ($row) {
                 return $row->nama_kecamatan ?: 'Tanpa Kecamatan';
             })
-            ->map(function ($rowsByKecamatan) {
+            ->map(function ($rowsByKecamatan) use ($fields) {
 
-                $totals = [];
-
-                $fields = [
-                    'jumlah_ub_prelist_awal',
-                    'jumlah_um_prelist_awal',
-                    'jumlah_umk_prelist_awal',
-
-                    'jumlah_usaha_ditemukan_bku',
-                    'jumlah_usaha_ditutup_bku',
-                    'jumlah_usaha_ganda_bku',
-                    'jumlah_usaha_tidak_ditemukan_bku',
-                    'jumlah_usaha_baru_bku',
-
-                    'jumlah_usaha_ditemukan_usaha_keluarga',
-                    'jumlah_usaha_tutup_usaha_keluarga',
-                    'jumlah_usaha_ganda_usaha_keluarga',
-                    'jumlah_usaha_tidak_ditemukan_usaha_keluarga',
-                    'jumlah_usaha_baru_usaha_keluarga',
-
-                    'jumlah_keluarga_ditemukan',
-                    'jumlah_keluarga_meninggal',
-                    'jumlah_keluarga_tidak_eligible',
-                    'jumlah_keluarga_tidak_ditemui',
-                    'jumlah_keluarga_tidak_ditemukan',
-                    'jumlah_keluarga_baru',
-
-                    'jumlah_prelist_usaha',
-                    'jumlah_usaha_realisasi',
-                    'jumlah_prelist_keluarga',
-                    'jumlah_keluarga_realisasi',
-                ];
-
+                $kecamatanTotals = [];
                 foreach ($fields as $field) {
-                    $totals[$field] = $rowsByKecamatan->sum($field);
+                    $kecamatanTotals[$field] = $rowsByKecamatan->sum($field);
                 }
 
-                $petugas = $rowsByKecamatan
+                $desaGroups = $rowsByKecamatan
                     ->groupBy(function ($row) {
-                        return $row->nama_petugas
-                            ?: ($row->ppl ?: 'Tanpa Petugas');
-                    });
+                        return $row->nama_desa ?: 'Tanpa Desa';
+                    })
+                    ->map(function ($rowsByDesa) use ($fields) {
+
+                        $desaTotals = [];
+                        foreach ($fields as $field) {
+                            $desaTotals[$field] = $rowsByDesa->sum($field);
+                        }
+
+                        $petugas = $rowsByDesa
+                            ->groupBy(function ($row) {
+                                return $row->nama_petugas
+                                    ?: ($row->ppl ?: 'Tanpa Petugas');
+                            });
+
+                        return [
+                            'totals'  => $desaTotals,
+                            'petugas' => $petugas,
+                        ];
+                    })
+                    ->sortKeys();
 
                 return [
-                    'totals' => $totals,
-                    'petugas' => $petugas,
+                    'totals' => $kecamatanTotals,
+                    'desa'   => $desaGroups,
                 ];
             })
             ->sortKeys();
@@ -670,14 +718,14 @@ class UsahaController extends Controller
 
         foreach ($progressTable as $namaKecamatan => &$kecamatanData) {
 
-        // | TOTAL KECAMATAN
+            // | TOTAL KECAMATAN
 
             $kecamatanData['totals'] = $hitungProgress(
                 $kecamatanData['totals']
             );
 
 
-        //  PER PETUGAS
+            //  PER PETUGAS
 
             foreach (
                 $kecamatanData['petugas']
@@ -705,7 +753,7 @@ class UsahaController extends Controller
             ->values()
             ->all();
 
-            // ----- Cari upload sebelumnya (untuk perbandingan naik/turun) -----
+        // ----- Cari upload sebelumnya (untuk perbandingan naik/turun) -----
         $previousUpload = UsahaUpload::query()
             ->when($latestUpload, fn($q) => $q->where('upload_date', '<', $latestUpload->upload_date))
             ->orderByDesc('upload_date')
@@ -733,7 +781,7 @@ class UsahaController extends Controller
             'keluarga_tidak_ditemui' => $grandTotals['jumlah_keluarga_tidak_ditemui'] - $previousSums['jumlah_keluarga_tidak_ditemui'],
             'keluarga_tidak_ditemukan' => $grandTotals['jumlah_keluarga_tidak_ditemukan'] - $previousSums['jumlah_keluarga_tidak_ditemukan'],
             'keluarga_baru' => $grandTotals['jumlah_keluarga_baru'] - $previousSums['jumlah_keluarga_baru'],
-            
+
         ];
 
         // ----- Hitung persentase versi upload sebelumnya (untuk delta) -----
@@ -768,71 +816,65 @@ class UsahaController extends Controller
 
             'progressTable' => $progressTable,
             'tanggalUploads' => $tanggalUploads,
+            'availableUploadDates' => $availableUploadDates,
             'dataGrouped' => $dataGrouped,
             'grandTotals' => $grandTotals,
             'progressGrandTotals' => $progressGrandTotals,
             'summaryComparison' => $summaryComparison,
             'percentageComparison' => $percentageComparison,
             'kecamatanOptions' => $kecamatanOptions,
+
+            'wilkerStatMap' => $wilkerStatMap,
+            'totalWilkerStat' => $totalWilkerStat,
+            'totalST2023' => $totalST2023,
         ]);
     }
-private function sumUsahaFieldsForUpload(?int $uploadId, array $fields, Request $request): array
-{
-    if (!$uploadId) {
-        return array_fill_keys($fields, 0);
-    }
+    private function sumUsahaFieldsForUpload(?int $uploadId, array $fields, Request $request): array
+    {
+        if (!$uploadId) {
+            return array_fill_keys($fields, 0);
+        }
 
-    $query = Usaha::query()->where('upload_id', $uploadId);
+        $query = Usaha::query()->where('upload_id', $uploadId);
 
-    if ($request->filled('kd_kab')) {
-        $query->where('kd_kab', $request->kd_kab);
-    }
+        if ($request->filled('kd_kab')) {
+            $query->where('kd_kab', $request->kd_kab);
+        }
+        if ($request->filled('nama_sls')) {
+            $query->where('nama_sls', $request->nama_sls);
+        }
+        if ($request->filled('ppl')) {
+            $query->where('ppl', $request->ppl);
+        }
+        if ($request->filled('pml')) {
+            $query->where('pml', $request->pml);
+        }
+        if ($request->filled('nama_kecamatan')) {
+            $usernames = PetugasReference::query()
+                ->where('nama_kecamatan', $request->nama_kecamatan)
+                ->pluck('petugas_username')
+                ->all();
+            $query->whereIn('ppl', $usernames);
+        }
 
-    if ($request->filled('nama_sls')) {
-        $query->where('nama_sls', $request->nama_sls);
-    }
+        // Dedup dulu per kombinasi unik lewat SQL subquery, baru SUM
+        $selectFields = implode(', ', array_map(fn($f) => "MAX($f) as $f", $fields));
 
-    if ($request->filled('ppl')) {
-        $query->where('ppl', $request->ppl);
-    }
+        $deduped = DB::table(DB::raw("({$query->select(array_merge(
+            ['id_wilayah', 'kd_kab', 'nama_sls', 'ppl', 'pml'],$fields
+        ))->toSql()}) as dedup"))
+            ->mergeBindings($query->getQuery())
+            ->groupBy('id_wilayah', 'kd_kab', 'nama_sls', 'ppl', 'pml')
+            ->selectRaw($selectFields)
+            ->get();
 
-    if ($request->filled('pml')) {
-        $query->where('pml', $request->pml);
-    }
-
-    if ($request->filled('nama_kecamatan')) {
-        $usernames = PetugasReference::query()
-            ->where('nama_kecamatan', $request->nama_kecamatan)
-            ->pluck('petugas_username')
-            ->all();
-
-        $query->whereIn('ppl', $usernames);
-    }
-
-    $rows = $query
-        ->get()
-        ->groupBy(function ($row) {
-            return implode('|', [
-                $row->id_wilayah,
-                $row->kd_kab,
-                $row->nama_sls,
-                $row->ppl,
-                $row->pml,
-            ]);
-        })
-        ->map(function ($group) use ($fields) {
-            $row = clone $group->first();
+        $sums = array_fill_keys($fields, 0);
+        foreach ($deduped as $row) {
             foreach ($fields as $field) {
-                $row->{$field} = $group->sum($field);
+                $sums[$field] += $row->{$field};
             }
-            return $row;
-        });
+        }
 
-    $sums = [];
-    foreach ($fields as $field) {
-        $sums[$field] = $rows->sum($field);
+        return $sums;
     }
-
-    return $sums;
-}
 }
