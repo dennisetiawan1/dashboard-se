@@ -718,10 +718,10 @@
             {{-- Header tabel --}}
             <div class="px-5 py-4 border-b border-slate-100">
                 <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                    Perbandingan Target BKU
+                    Perbandingan Pencapaian
                 </h3>
                 <p class="mt-1 text-xs text-slate-900">
-                    Perbandingan pencapaian BKU Ditemukan + Baru dengan target historis.
+                    Perbandingan pencapaian BKU dan Usaha Keluarga dengan muatan Wilker Stat dan ST 2023.
                 </p>
             </div>
 
@@ -931,7 +931,7 @@
         {{-- TABEL 1 - PERKEMBANGAN DATA BERDASARKAN TANGGAL --}}
 
         <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-            {{-- Header tabel --}}
+        {{-- Header tabel --}}
             <div class="px-5 py-4 border-b border-slate-100">
                 <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wide">
                     Perbandingan Pencapaian
