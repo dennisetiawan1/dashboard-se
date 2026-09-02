@@ -758,9 +758,9 @@
 
                 <div class="bg-white rounded-lg border border-slate-200 p-3">
                     <p class="text-xs text-slate-600 font-semibold">Usaha Keluarga vs ST 2023</p>
-                    <p class="text-xl font-bold {{ $persenUsahaKeluarga >= 100 ? 'text-green-600' : 'text-red-600' }} mt-1">{{ $persenUsahaKeluarga }}%</p>
+                    <p class="text-xl font-bold {{ $persenUsahaKeluarga >= 100 ? 'text-green-600' : 'text-blue-600' }} mt-1">{{ $persenUsahaKeluarga }}%</p>
                     <div class="w-full bg-slate-200 rounded-full h-1.5 mt-2">
-                        <div class="h-1.5 rounded-full {{ $persenUsahaKeluarga >= 100 ? 'bg-green-500' : 'bg-red-500' }}" style="width: min({{ $persenUsahaKeluarga }}%, 100%)"></div>
+                        <div class="h-1.5 rounded-full {{ $persenUsahaKeluarga >= 100 ? 'bg-green-500' : 'bg-blue-500' }}" style="width: min({{ $persenUsahaKeluarga }}%, 100%)"></div>
                     </div>
                 </div>
             </div>
@@ -934,11 +934,10 @@
             {{-- Header tabel --}}
             <div class="px-5 py-4 border-b border-slate-100">
                 <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                    Perkembangan Data Usaha
+                    Perbandingan Pencapaian
                 </h3>
                 <p class="mt-1 text-xs text-slate-900">
-                    Perbandingan jumlah BKU, Usaha Keluarga, dan Keluarga berdasarkan tanggal upload.
-                    Klik baris kecamatan untuk melihat rincian per petugas.
+                    Perbandingan pencapaian BKU dan Usaha Keluarga dengan muatan Wilker Stat dan ST 2023.
                 </p>
             </div>
 
