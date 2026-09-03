@@ -800,7 +800,7 @@
                         @endphp
 
                         @forelse ($progressTable as $kecamatan => $group)
-                        //hapus tanpa kecamatan
+                        {{-- hapus tanpa kecamatan --}}
                             @if ($kecamatan === 'Tanpa Kecamatan')
                                 @continue
                             @endif
