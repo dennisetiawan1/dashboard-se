@@ -800,6 +800,10 @@
                         @endphp
 
                         @forelse ($progressTable as $kecamatan => $group)
+                        //hapus tanpa kecamatan
+                            @if ($kecamatan === 'Tanpa Kecamatan')
+                                @continue
+                            @endif
                             @php
                                 $bkuTerbaru = $group['totals'][$tanggalTerbaruKey]['bku'] ?? 0;
                                 $usahaKeluargaTerbaru = $group['totals'][$tanggalTerbaruKey]['usaha_keluarga'] ?? 0;
@@ -851,23 +855,38 @@
 
                     <tfoot>
                         <tr class="bg-gradient-to-r from-slate-100 to-slate-50 border-t-2 border-slate-300">
+                            @php
+                                $totalBKU = $progressGrandTotals[$tanggalTerbaruKey]['bku'] ?? 0;
+                                $totalUsahaKeluarga = $progressGrandTotals[$tanggalTerbaruKey]['usaha_keluarga'] ?? 0;
+                                $totalPersenBKU = $totalWilkerStat > 0 ? round(($totalBKU / $totalWilkerStat) * 100, 1) : 0;
+                                $totalPersenUTP = $totalST2023 > 0 ? round(($totalUTPPertanian / $totalST2023) * 100, 1) : 0;
+                            @endphp
+                            
                             <td class="sticky left-0 z-10 bg-slate-100 px-5 py-4 font-bold text-slate-900 whitespace-nowrap border-r border-slate-200">
                                 TOTAL
                             </td>
                             <td class="px-5 py-4 text-center font-bold text-slate-900">
-                                {{ number_format($progressGrandTotals[$tanggalTerbaruKey]['bku'] ?? 0) }}
+                                {{ number_format($totalBKU) }}
                             </td>
-                            <td class="px-5 py-4 text-center font-bold text-slate-900">
-                                {{ number_format($totalWilkerStat) }}
+                            <td class="px-5 py-4 text-center">
+                                <span class="font-semibold text-slate-600">{{ number_format($totalWilkerStat) }}</span>
+                                <div class="mt-2 w-32 mx-auto bg-slate-200 rounded-full h-1.5">
+                                    <div class="bg-amber-500 h-1.5 rounded-full" style="width: min({{ $totalPersenBKU }}%, 100%)"></div>
+                                </div>
+                                <p class="text-xs text-slate-500 mt-1 font-bold">{{ $totalPersenBKU }}%</p>
                             </td>
                             <td class="px-5 py-4 text-center font-bold text-slate-900">
                                 {{ number_format($totalUTPPertanian) }}
                             </td>
-                            <td class="px-5 py-4 text-center font-bold text-slate-900">
-                                {{ number_format($totalST2023) }}
+                            <td class="px-5 py-4 text-center">
+                                <span class="font-semibold text-slate-600">{{ number_format($totalST2023) }}</span>
+                                <div class="mt-2 w-32 mx-auto bg-slate-200 rounded-full h-1.5">
+                                    <div class="bg-purple-500 h-1.5 rounded-full" style="width: min({{ $totalPersenUTP }}%, 100%)"></div>
+                                </div>
+                                <p class="text-xs text-slate-500 mt-1 font-bold">{{ $totalPersenUTP }}%</p>
                             </td>
                             <td class="px-5 py-4 text-center font-bold text-slate-900">
-                                {{ number_format($progressGrandTotals[$tanggalTerbaruKey]['usaha_keluarga'] ?? 0) }}
+                                {{ number_format($totalUsahaKeluarga) }}
                             </td>
                         </tr>
                     </tfoot>
@@ -1381,12 +1400,7 @@
                             </label>
                             <select name="tanggal"
                                 class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700">
-                                <option value="">Upload Terbaru</option>
-                                @foreach ($availableUploadDates as $tgl)
-                                    <option value="{{ $tgl }}" {{ request('tanggal') == $tgl ? 'selected' : '' }}>
-                                        {{ \Illuminate\Support\Carbon::parse($tgl)->translatedFormat('d M Y') }}
-                                    </option>
-                                @endforeach
+                               c
                             </select>
                         </div>
                         <div>
