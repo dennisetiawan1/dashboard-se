@@ -807,6 +807,10 @@
                                 $wilkerStat = $target?->bku_wilkerstat ?? 0;
                                 $st2023 = $target?->st_2023 ?? 0;
                                 $utpPertanian = $target?->utp_pertanian ?? 0;
+                                
+                                // Hitung persentase
+                                $persenBKU = $wilkerStat > 0 ? round(($bkuTerbaru / $wilkerStat) * 100, 1) : 0;
+                                $persenUTP = $st2023 > 0 ? round(($utpPertanian / $st2023) * 100, 1) : 0;
                             @endphp
                             <tr class="">
                                 <td class="sticky left-0 z-10 px-5 py-4 font-semibold text-slate-700 whitespace-nowrap border-r border-slate-200">
@@ -818,8 +822,9 @@
                                 <td class="px-5 py-4 text-center">
                                     <span class="font-semibold text-slate-600">{{ number_format($wilkerStat) }}</span>
                                     <div class="mt-2 w-32 mx-auto bg-slate-200 rounded-full h-1.5">
-                                        <div class="bg-amber-500 h-1.5 rounded-full" style="width: min({{ $wilkerStat > 0 ? ($bkuTerbaru / $wilkerStat) * 100 : 0 }}%, 100%)"></div>
+                                        <div class="bg-amber-500 h-1.5 rounded-full" style="width: min({{ $persenBKU }}%, 100%)"></div>
                                     </div>
+                                    <p class="text-xs text-slate-500 mt-1">{{ $persenBKU }}%</p>
                                 </td>
                                 <td class="px-5 py-4 text-center">
                                     <span class="font-bold text-slate-900">{{ number_format($utpPertanian) }}</span>
@@ -827,8 +832,9 @@
                                 <td class="px-5 py-4 text-center">
                                     <span class="font-semibold text-slate-600">{{ number_format($st2023) }}</span>
                                     <div class="mt-2 w-32 mx-auto bg-slate-200 rounded-full h-1.5">
-                                        <div class="bg-purple-500 h-1.5 rounded-full" style="width: min({{ $st2023 > 0 ? ($utpPertanian / $st2023) * 100 : 0 }}%, 100%)"></div>
+                                        <div class="bg-purple-500 h-1.5 rounded-full" style="width: min({{ $persenUTP }}%, 100%)"></div>
                                     </div>
+                                    <p class="text-xs text-slate-500 mt-1">{{ $persenUTP }}%</p>
                                 </td>
                                 <td class="px-5 py-4 text-center">
                                     <span class="font-bold text-slate-900">{{ number_format($usahaKeluargaTerbaru) }}</span>
