@@ -16,5 +16,6 @@ class KecamatanWilkerStat extends Model
         'kecamatan',
         'bku_wilkerstat',
         'st_2023',
+        'utp_pertanian'
     ];
 }

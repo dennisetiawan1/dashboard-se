@@ -38,12 +38,14 @@ class UsahaController extends Controller
             ->get([
                 'kecamatan',
                 'bku_wilkerstat',
-                'st_2023'
+                'st_2023',
+                'utp_pertanian'
             ])
             ->keyBy('kecamatan');
 
         $totalWilkerStat = KecamatanWilkerStat::sum('bku_wilkerstat');
         $totalST2023 = KecamatanWilkerStat::sum('st_2023');
+        $totalUTPPertanian = KecamatanWilkerStat::sum('utp_pertanian');
 
         /* FILTER OPTIONS - KECAMATAN */
         $kecamatanOptions = PetugasReference::query()
@@ -827,6 +829,7 @@ class UsahaController extends Controller
             'wilkerStatMap' => $wilkerStatMap,
             'totalWilkerStat' => $totalWilkerStat,
             'totalST2023' => $totalST2023,
+            'totalUTPPertanian' => $totalUTPPertanian,
         ]);
     }
     private function sumUsahaFieldsForUpload(?int $uploadId, array $fields, Request $request): array

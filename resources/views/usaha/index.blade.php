@@ -713,7 +713,7 @@
 
         </div>
 
-       {{-- TABEL 3 - PERBANDINGAN BKU (ENHANCED) --}}
+        {{-- TABEL 3 - PERBANDINGAN PENCAPAIAN --}}
         <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden mt-6">
             {{-- Header tabel --}}
             <div class="px-5 py-4 border-b border-slate-100">
@@ -721,18 +721,19 @@
                     Perbandingan Pencapaian
                 </h3>
                 <p class="mt-1 text-xs text-slate-900">
-                    Perbandingan pencapaian BKU dan Usaha Keluarga dengan muatan Wilker Stat dan ST 2023.
+                    Perbandingan pencapaian BKU, UTP Pertanian, dan Usaha Keluarga dengan muatan Wilker Stat dan ST 2023.
                 </p>
             </div>
 
             {{-- SUMMARY CARDS --}}
-            <div class="px-5 py-4 bg-slate-50 grid grid-cols-4 gap-3">
+            <div class="px-5 py-4 bg-slate-50 grid grid-cols-3 gap-3">
                 @php
                     $tanggalTerbaru = end($tanggalUploads);
                     $tanggalTerbaruKey = \Carbon\Carbon::parse($tanggalTerbaru)->format('Y-m-d');
                     $totalTerbaru = $progressGrandTotals[$tanggalTerbaruKey]['bku'] ?? 0;
                     $totalUsahaKeluarga = $progressGrandTotals[$tanggalTerbaruKey]['usaha_keluarga'] ?? 0;
                     $persenWilker = $totalWilkerStat > 0 ? round(($totalTerbaru / $totalWilkerStat) * 100, 1) : 0;
+                    $persenUTPPertanian = $totalST2023 > 0 ? round(($totalUTPPertanian / $totalST2023) * 100, 1) : 0;
                     $persenUsahaKeluarga = $totalST2023 > 0 ? round(($totalUsahaKeluarga / $totalST2023) * 100, 1) : 0;
                 @endphp
 
@@ -743,13 +744,7 @@
                 </div>
 
                 <div class="bg-white rounded-lg border border-slate-200 p-3">
-                    <p class="text-xs text-slate-600 font-semibold">Usaha Keluarga</p>
-                    <p class="text-xl font-bold text-slate-900 mt-1">{{ number_format($totalUsahaKeluarga) }}</p>
-                    <p class="text-xs text-slate-500 mt-1">Tanggal: {{ \Carbon\Carbon::parse($tanggalTerbaru)->translatedFormat('d F Y') }}</p>
-                </div>
-
-                <div class="bg-white rounded-lg border border-slate-200 p-3">
-                    <p class="text-xs text-slate-600 font-semibold">vs Muatan Wilkerstat</p>
+                    <p class="text-xs text-slate-600 font-semibold">BKU vs Muatan Wilkerstat</p>
                     <p class="text-xl font-bold {{ $persenWilker >= 100 ? 'text-green-600' : 'text-amber-600' }} mt-1">{{ $persenWilker }}%</p>
                     <div class="w-full bg-slate-200 rounded-full h-1.5 mt-2">
                         <div class="h-1.5 rounded-full {{ $persenWilker >= 100 ? 'bg-green-500' : 'bg-amber-500' }}" style="width: min({{ $persenWilker }}%, 100%)"></div>
@@ -757,12 +752,20 @@
                 </div>
 
                 <div class="bg-white rounded-lg border border-slate-200 p-3">
+                    <p class="text-xs text-slate-600 font-semibold">UTP Pertanian vs ST 2023</p>
+                    <p class="text-xl font-bold {{ $persenUTPPertanian >= 100 ? 'text-green-600' : 'text-purple-600' }} mt-1">{{ $persenUTPPertanian }}%</p>
+                    <div class="w-full bg-slate-200 rounded-full h-1.5 mt-2">
+                        <div class="h-1.5 rounded-full {{ $persenUTPPertanian >= 100 ? 'bg-green-500' : 'bg-purple-500' }}" style="width: min({{ $persenUTPPertanian }}%, 100%)"></div>
+                    </div>
+                </div>
+
+                {{-- <div class="bg-white rounded-lg border border-slate-200 p-3">
                     <p class="text-xs text-slate-600 font-semibold">Usaha Keluarga vs ST 2023</p>
                     <p class="text-xl font-bold {{ $persenUsahaKeluarga >= 100 ? 'text-green-600' : 'text-blue-600' }} mt-1">{{ $persenUsahaKeluarga }}%</p>
                     <div class="w-full bg-slate-200 rounded-full h-1.5 mt-2">
                         <div class="h-1.5 rounded-full {{ $persenUsahaKeluarga >= 100 ? 'bg-green-500' : 'bg-blue-500' }}" style="width: min({{ $persenUsahaKeluarga }}%, 100%)"></div>
                     </div>
-                </div>
+                </div> --}}
             </div>
 
             <div class="overflow-x-auto">
@@ -779,14 +782,14 @@
                                 Muatan Wilkerstat
                             </th>
                             <th class="px-5 py-4 text-center text-[11px] uppercase tracking-wider text-slate-900 whitespace-nowrap">
-                                Usaha Keluarga
+                                UTP Pertanian
                             </th>
                             <th class="px-5 py-4 text-center text-[11px] uppercase tracking-wider text-slate-900 whitespace-nowrap">
                                 ST 2023
                             </th>
-                            {{-- <th class="px-5 py-4 text-center text-[11px] uppercase tracking-wider text-slate-900 whitespace-nowrap">
-                                Status
-                            </th> --}}
+                            <th class="px-5 py-4 text-center text-[11px] uppercase tracking-wider text-slate-900 whitespace-nowrap">
+                                Usaha Keluarga
+                            </th>
                         </tr>
                     </thead>
 
@@ -803,25 +806,7 @@
                                 $target = $wilkerStatMap[$kecamatan] ?? null;
                                 $wilkerStat = $target?->bku_wilkerstat ?? 0;
                                 $st2023 = $target?->st_2023 ?? 0;
-                                
-                                // Status BKU (dibanding Wilker & ST 2023)
-                                $statusBKU_Wilker = $bkuTerbaru >= $wilkerStat;
-                                $statusBKU_ST = $bkuTerbaru >= $st2023;
-                                
-                                // Status Usaha Keluarga (dibanding ST 2023)
-                                $statusUsaha_ST = $usahaKeluargaTerbaru >= $st2023;
-                                
-                                // Tentukan status keseluruhan
-                                if ($statusBKU_ST && $statusUsaha_ST) {
-                                    $status = 'Tercapai';
-                                    $statusClass = 'bg-green-100 text-green-700';
-                                } elseif ($statusBKU_Wilker || ($usahaKeluargaTerbaru > 0)) {
-                                    $status = 'Sebagian';
-                                    $statusClass = 'bg-amber-100 text-amber-700';
-                                } else {
-                                    $status = 'Kurang';
-                                    $statusClass = 'bg-red-100 text-red-700';
-                                }
+                                $utpPertanian = $target?->utp_pertanian ?? 0;
                             @endphp
                             <tr class="">
                                 <td class="sticky left-0 z-10 px-5 py-4 font-semibold text-slate-700 whitespace-nowrap border-r border-slate-200">
@@ -837,30 +822,21 @@
                                     </div>
                                 </td>
                                 <td class="px-5 py-4 text-center">
-                                    <span class="font-bold text-slate-900">{{ number_format($usahaKeluargaTerbaru) }}</span>
+                                    <span class="font-bold text-slate-900">{{ number_format($utpPertanian) }}</span>
                                 </td>
-                                
                                 <td class="px-5 py-4 text-center">
                                     <span class="font-semibold text-slate-600">{{ number_format($st2023) }}</span>
                                     <div class="mt-2 w-32 mx-auto bg-slate-200 rounded-full h-1.5">
-                                        <div class="bg-blue-500 h-1.5 rounded-full" style="width: min({{ $st2023 > 0 ? ($usahaKeluargaTerbaru / $st2023) * 100 : 0 }}%, 100%)"></div>
+                                        <div class="bg-purple-500 h-1.5 rounded-full" style="width: min({{ $st2023 > 0 ? ($utpPertanian / $st2023) * 100 : 0 }}%, 100%)"></div>
                                     </div>
                                 </td>
-                                {{-- <td class="px-5 py-4 text-center">
-                                    <span class="inline-flex items-center px-2 py-1 {{ $statusClass }} rounded text-xs font-semibold">
-                                        @if ($status === 'Tercapai')
-                                            ✓ Tercapai
-                                        @elseif ($status === 'Sebagian')
-                                            ⚠ Sebagian
-                                        @else
-                                            ✗ Kurang
-                                        @endif
-                                    </span>
-                                </td> --}}
+                                <td class="px-5 py-4 text-center">
+                                    <span class="font-bold text-slate-900">{{ number_format($usahaKeluargaTerbaru) }}</span>
+                                </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="5" class="px-5 py-10 text-center text-slate-400">
+                                <td colspan="6" class="px-5 py-10 text-center text-slate-400">
                                     Belum ada data perbandingan.
                                 </td>
                             </tr>
@@ -879,65 +855,31 @@
                                 {{ number_format($totalWilkerStat) }}
                             </td>
                             <td class="px-5 py-4 text-center font-bold text-slate-900">
-                                {{ number_format($progressGrandTotals[$tanggalTerbaruKey]['usaha_keluarga'] ?? 0) }}
+                                {{ number_format($totalUTPPertanian) }}
                             </td>
                             <td class="px-5 py-4 text-center font-bold text-slate-900">
                                 {{ number_format($totalST2023) }}
                             </td>
-                            {{-- <td class="px-5 py-4 text-center">
-                                @php
-                                    $totalBKU = $progressGrandTotals[$tanggalTerbaruKey]['bku'] ?? 0;
-                                    $totalUsahaKeluargaGrand = $progressGrandTotals[$tanggalTerbaruKey]['usaha_keluarga'] ?? 0;
-                                    
-                                    $totalStatusBKU_ST = $totalBKU >= $totalST2023;
-                                    $totalStatusUsaha_ST = $totalUsahaKeluargaGrand >= $totalST2023;
-                                    
-                                    if ($totalStatusBKU_ST && $totalStatusUsaha_ST) {
-                                        $totalStatus = 'Tercapai';
-                                        $totalStatusClass = 'bg-green-100 text-green-700';
-                                    } elseif ($totalBKU >= $totalWilkerStat || $totalUsahaKeluargaGrand > 0) {
-                                        $totalStatus = 'Sebagian';
-                                        $totalStatusClass = 'bg-amber-100 text-amber-700';
-                                    } else {
-                                        $totalStatus = 'Kurang';
-                                        $totalStatusClass = 'bg-red-100 text-red-700';
-                                    }
-                                @endphp
-                                <span class="inline-flex items-center px-2 py-1 {{ $totalStatusClass }} rounded text-xs font-bold">
-                                    @if ($totalStatus === 'Tercapai')
-                                        ✓ Tercapai
-                                    @elseif ($totalStatus === 'Sebagian')
-                                        ⚠ Sebagian
-                                    @else
-                                        ✗ Kurang
-                                    @endif
-                                </span>
-                            </td> --}}
+                            <td class="px-5 py-4 text-center font-bold text-slate-900">
+                                {{ number_format($progressGrandTotals[$tanggalTerbaruKey]['usaha_keluarga'] ?? 0) }}
+                            </td>
                         </tr>
                     </tfoot>
                 </table>
             </div>
-
-            {{-- KETERANGAN --}}
-            {{-- <div class="px-5 py-3 bg-slate-50 border-t border-slate-100">
-                <p class="text-xs text-slate-600">
-                    <span class="inline-block mr-3">✓ <strong>Tercapai:</strong> BKU & Usaha Keluarga keduanya mencapai ST 2023</span>
-                    <span class="inline-block mr-3">⚠ <strong>Sebagian:</strong> Salah satu dari BKU atau Usaha Keluarga mencapai target</span>
-                    <span class="inline-block">✗ <strong>Kurang:</strong> Keduanya belum mencapai target</span>
-                </p>
-            </div> --}}
         </div>
 
         {{-- TABEL 1 - PERKEMBANGAN DATA BERDASARKAN TANGGAL --}}
 
         <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        {{-- Header tabel --}}
+            {{-- Header tabel --}}
             <div class="px-5 py-4 border-b border-slate-100">
                 <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                    Perbandingan Pencapaian
+                    Perkembangan Data Usaha
                 </h3>
                 <p class="mt-1 text-xs text-slate-900">
-                    Perbandingan pencapaian BKU dan Usaha Keluarga dengan muatan Wilker Stat dan ST 2023.
+                    Perbandingan jumlah BKU, Usaha Keluarga, dan Keluarga berdasarkan tanggal upload.
+                    Klik baris kecamatan untuk melihat rincian per petugas.
                 </p>
             </div>
 

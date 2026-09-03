@@ -16,8 +16,9 @@ return new class extends Migration
 
             // Buat fisik kolom di database:
             $table->string('kecamatan')->nullable();
-            $table->string('bku_wilkerstat')->nullable();
-            $table->string('st_2023')->nullable();
+            $table->integer('bku_wilkerstat')->nullable();
+            $table->integer('st_2023')->nullable();
+            $table->integer('utp_pertanian')->nullable();
 
             $table->timestamps();
         });
