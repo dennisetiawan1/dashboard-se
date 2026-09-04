@@ -713,7 +713,7 @@
 
         </div>
 
-        {{-- TABEL 3 - PERBANDINGAN PENCAPAIAN --}}
+        {{-- TABEL - PERBANDINGAN PENCAPAIAN --}}
         <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden mt-6">
             {{-- Header tabel --}}
             <div class="px-5 py-4 border-b border-slate-100">
@@ -793,36 +793,27 @@
                         </tr>
                     </thead>
 
-                    <tbody class="divide-y divide-slate-100">
-                        @php
-                            $tanggalTerbaru = end($tanggalUploads);
-                            $tanggalTerbaruKey = \Carbon\Carbon::parse($tanggalTerbaru)->format('Y-m-d');
-                        @endphp
+                    <tbody class="divide-y divide-slate-100" x-data="{ open: {}, openDesa: {} }">
+                        @php $tanggalTerbaruKey = \Carbon\Carbon::parse(end($tanggalUploads))->format('Y-m-d'); @endphp
 
-                        @forelse ($progressTable as $kecamatan => $group)
-                        {{-- hapus tanpa kecamatan --}}
-                            @if ($kecamatan === 'Tanpa Kecamatan')
-                                @continue
-                            @endif
+                        @forelse ($comparisonTable as $kecamatan => $group)
                             @php
-                                $bkuTerbaru = $group['totals'][$tanggalTerbaruKey]['bku'] ?? 0;
-                                $usahaKeluargaTerbaru = $group['totals'][$tanggalTerbaruKey]['usaha_keluarga'] ?? 0;
-                                $target = $wilkerStatMap[$kecamatan] ?? null;
-                                $wilkerStat = $target?->bku_wilkerstat ?? 0;
-                                $st2023 = $target?->st_2023 ?? 0;
-                                $utpPertanian = $target?->utp_pertanian ?? 0;
-                                
-                                // Hitung persentase
-                                $persenBKU = $wilkerStat > 0 ? round(($bkuTerbaru / $wilkerStat) * 100, 1) : 0;
-                                $persenUTP = $st2023 > 0 ? round(($utpPertanian / $st2023) * 100, 1) : 0;
+                                $kecKey = \Illuminate\Support\Str::slug($kecamatan);
+                                $bkuTerbaru = $group['tree']['bku_progress'];
+                                $usahaKeluargaTerbaru = $group['tree']['usaha_keluarga_progress'];
+                                $wilkerStat = $group['tree']['bku'];
+                                $st2023 = $group['tree']['st_2023'];
+                                $utpTotal = $group['tree']['utp'];
+                                $persenBKU = $wilkerStat > 0 ? round($bkuTerbaru / $wilkerStat * 100, 1) : 0;
+                                $persenUTP = $st2023 > 0 ? round($utpTotal / $st2023 * 100, 1) : 0;
                             @endphp
-                            <tr class="">
-                                <td class="sticky left-0 z-10 px-5 py-4 font-semibold text-slate-700 whitespace-nowrap border-r border-slate-200">
-                                    {{ $kecamatan }}
+
+                            {{-- ROW KECAMATAN --}}
+                            <tr class="cursor-pointer hover:bg-slate-50" @click="open['{{ $kecKey }}'] = !open['{{ $kecKey }}']">
+                                <td class="sticky left-0 z-10 px-5 py-4 font-semibold text-slate-700 whitespace-nowrap border-r border-slate-200 bg-white">
+                                    <span x-text="open['{{ $kecKey }}'] ? '▾' : '▸'"></span> {{ $kecamatan }}
                                 </td>
-                                <td class="px-5 py-4 text-center">
-                                    <span class="font-bold text-slate-900">{{ number_format($bkuTerbaru) }}</span>
-                                </td>
+                                <td class="px-5 py-4 text-center font-bold text-slate-900">{{ number_format($bkuTerbaru) }}</td>
                                 <td class="px-5 py-4 text-center">
                                     <span class="font-semibold text-slate-600">{{ number_format($wilkerStat) }}</span>
                                     <div class="mt-2 w-32 mx-auto bg-slate-200 rounded-full h-1.5">
@@ -830,9 +821,7 @@
                                     </div>
                                     <p class="text-xs text-slate-500 mt-1">{{ $persenBKU }}%</p>
                                 </td>
-                                <td class="px-5 py-4 text-center">
-                                    <span class="font-bold text-slate-900">{{ number_format($utpPertanian) }}</span>
-                                </td>
+                                <td class="px-5 py-4 text-center font-bold text-slate-900">{{ number_format($utpTotal) }}</td>
                                 <td class="px-5 py-4 text-center">
                                     <span class="font-semibold text-slate-600">{{ number_format($st2023) }}</span>
                                     <div class="mt-2 w-32 mx-auto bg-slate-200 rounded-full h-1.5">
@@ -840,16 +829,81 @@
                                     </div>
                                     <p class="text-xs text-slate-500 mt-1">{{ $persenUTP }}%</p>
                                 </td>
-                                <td class="px-5 py-4 text-center">
-                                    <span class="font-bold text-slate-900">{{ number_format($usahaKeluargaTerbaru) }}</span>
-                                </td>
+                                <td class="px-5 py-4 text-center font-bold text-slate-900">{{ number_format($usahaKeluargaTerbaru) }}</td>
                             </tr>
+
+                           {{-- ROW DESA --}}
+                            @foreach (($group['tree']['desa'] ?? []) as $namaDesa => $desaGroup)
+                                @continue(empty(trim($namaDesa ?? '')))
+
+                                @php
+                                    $desaKey = $kecKey . '-' . \Illuminate\Support\Str::slug($namaDesa);
+                                    $persenBKUDesa = $desaGroup['bku'] > 0 ? round($desaGroup['bku_progress'] / $desaGroup['bku'] * 100, 1) : 0;
+                                    $persenUTPDesa = $desaGroup['st_2023'] > 0 ? round($desaGroup['utp'] / $desaGroup['st_2023'] * 100, 1) : 0;
+                                @endphp
+
+                                <template x-if="open['{{ $kecKey }}']">
+                                    <tr class="bg-slate-50 cursor-pointer hover:bg-slate-100"
+                                        @click="openDesa['{{ $desaKey }}'] = !openDesa['{{ $desaKey }}']">
+                                        <td class="sticky left-0 z-10 px-5 py-3 pl-10 text-slate-600 bg-slate-50 whitespace-nowrap">
+                                            <span x-text="openDesa['{{ $desaKey }}'] ? '▾' : '▸'"></span> {{ $namaDesa }}
+                                        </td>
+                                        <td class="px-5 py-3 text-center font-semibold">{{ number_format($desaGroup['bku_progress']) }}</td>
+                                        <td class="px-5 py-3 text-center">
+                                            <span class="font-semibold">{{ number_format($desaGroup['bku']) }}</span>
+                                            <div class="mt-2 w-28 mx-auto bg-slate-200 rounded-full h-1.5">
+                                                <div class="bg-amber-500 h-1.5 rounded-full" style="width: min({{ $persenBKUDesa }}%, 100%)"></div>
+                                            </div>
+                                            <p class="text-xs text-slate-500 mt-1">{{ $persenBKUDesa }}%</p>
+                                        </td>
+                                        <td class="px-5 py-3 text-center font-semibold">{{ number_format($desaGroup['utp']) }}</td>
+                                        <td class="px-5 py-3 text-center">
+                                            <span class="font-semibold">{{ number_format($desaGroup['st_2023']) }}</span>
+                                            <div class="mt-2 w-28 mx-auto bg-slate-200 rounded-full h-1.5">
+                                                <div class="bg-purple-500 h-1.5 rounded-full" style="width: min({{ $persenUTPDesa }}%, 100%)"></div>
+                                            </div>
+                                            <p class="text-xs text-slate-500 mt-1">{{ $persenUTPDesa }}%</p>
+                                        </td>
+                                        <td class="px-5 py-3 text-center font-semibold">{{ number_format($desaGroup['usaha_keluarga_progress']) }}</td>
+                                    </tr>
+                                </template>
+
+                                {{-- ROW SLS --}}
+                                @foreach ($desaGroup['sls'] as $slsRow)
+                                    @php
+                                        $namaSls = trim($slsRow['sls'] ?? '') !== '' ? $slsRow['sls'] : 'Tanpa SLS';
+                                        $persenBKUSls = $slsRow['bku_wilkerstat'] > 0 ? round($slsRow['bku_progress'] / $slsRow['bku_wilkerstat'] * 100, 1) : 0;
+                                        $persenUTPSls = $slsRow['st_2023'] > 0 ? round($slsRow['total_usaha'] / $slsRow['st_2023'] * 100, 1) : 0;
+                                    @endphp
+
+                                    <template x-if="open['{{ $kecKey }}'] && openDesa['{{ $desaKey }}']">
+                                        <tr class="hover:bg-slate-50">
+                                            <td class="sticky left-0 z-10 px-5 py-2 pl-16 text-slate-500 bg-white whitespace-nowrap">
+                                                {{ $namaSls }}
+                                            </td>
+                                            <td class="px-5 py-2 text-center">{{ number_format($slsRow['bku_progress']) }}</td>
+                                            <td class="px-5 py-2 text-center">
+                                                <span>{{ number_format($slsRow['bku_wilkerstat']) }}</span>
+                                                <div class="mt-1.5 w-24 mx-auto bg-slate-200 rounded-full h-1">
+                                                    <div class="bg-amber-500 h-1 rounded-full" style="width: min({{ $persenBKUSls }}%, 100%)"></div>
+                                                </div>
+                                                <p class="text-[11px] text-slate-400 mt-0.5">{{ $persenBKUSls }}%</p>
+                                            </td>
+                                            <td class="px-5 py-2 text-center">{{ number_format($slsRow['total_usaha']) }}</td>
+                                            <td class="px-5 py-2 text-center">
+                                                <span>{{ number_format($slsRow['st_2023']) }}</span>
+                                                <div class="mt-1.5 w-24 mx-auto bg-slate-200 rounded-full h-1">
+                                                    <div class="bg-purple-500 h-1 rounded-full" style="width: min({{ $persenUTPSls }}%, 100%)"></div>
+                                                </div>
+                                                <p class="text-[11px] text-slate-400 mt-0.5">{{ $persenUTPSls }}%</p>
+                                            </td>
+                                            <td class="px-5 py-2 text-center">{{ number_format($slsRow['usaha_keluarga_progress']) }}</td>
+                                        </tr>
+                                    </template>
+                                @endforeach
+                            @endforeach
                         @empty
-                            <tr>
-                                <td colspan="6" class="px-5 py-10 text-center text-slate-400">
-                                    Belum ada data perbandingan.
-                                </td>
-                            </tr>
+                            <tr><td colspan="6" class="px-5 py-10 text-center text-slate-400">Belum ada data perbandingan.</td></tr>
                         @endforelse
                     </tbody>
 

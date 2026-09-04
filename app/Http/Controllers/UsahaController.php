@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use App\Models\DesaReference;
 use App\Models\KecamatanWilkerStat;
+use App\Models\UtpPertanian;
 
 class UsahaController extends Controller
 {
@@ -33,19 +34,116 @@ class UsahaController extends Controller
             ])
             ->keyBy('id_wilayah');
 
-        // Ambil data wilker stat
-       $wilkerStatMap = KecamatanWilkerStat::query()
-            ->get([
-                'kecamatan',
-                'bku_wilkerstat',
-                'st_2023',
-                'utp_pertanian'
-            ])
-            ->keyBy('kecamatan');
+        // PROGRESS DATA — per petugas + id_wilayah + tanggal upload
+        $progressData = Usaha::query()
+            ->join('usaha_uploads', 'usaha.upload_id', '=', 'usaha_uploads.id')
+            ->select(
+                'usaha.ppl',
+                'usaha.id_wilayah',
+                'usaha_uploads.upload_date',
+                DB::raw('SUM(usaha.jumlah_usaha_ditemukan_bku + usaha.jumlah_usaha_baru_bku) as bku'),
+                DB::raw('SUM(usaha.jumlah_usaha_ditemukan_usaha_keluarga + usaha.jumlah_usaha_baru_usaha_keluarga) as usaha_keluarga'),
+                DB::raw('SUM(usaha.jumlah_keluarga_ditemukan + usaha.jumlah_keluarga_baru) as keluarga')
+            )
+            ->groupBy('usaha.ppl', 'usaha.id_wilayah', 'usaha_uploads.upload_date')
+            ->get();
 
-        $totalWilkerStat = KecamatanWilkerStat::sum('bku_wilkerstat');
-        $totalST2023 = KecamatanWilkerStat::sum('st_2023');
-        $totalUTPPertanian = KecamatanWilkerStat::sum('utp_pertanian');
+        // Ambil BKU/usaha_keluarga per id_wilayah, cuma tanggal upload terbaru per wilayah
+        $progressByWilayah = collect($progressData)
+            ->groupBy('id_wilayah')
+            ->map(function ($rows) {
+                $terbaru = $rows->sortByDesc('upload_date')->first();
+                return [
+                    'bku' => (int) $terbaru->bku,
+                    'usaha_keluarga' => (int) $terbaru->usaha_keluarga,
+                ];
+            });
+
+        // WILKER STAT & UTP PERTANIAN — per baris (id_wilayah sampai SLS)
+        // NAMA WILAYAH REFERENSI — kecamatan/desa/sls per id_wilayah (sumber nama = KecamatanWilkerStat)
+        $namaWilayah = KecamatanWilkerStat::query()
+            ->select('id_wilayah', 'kecamatan', 'desa', 'sls')
+            ->groupBy('id_wilayah', 'kecamatan', 'desa', 'sls')
+            ->get()
+            ->keyBy('id_wilayah');
+
+        // WILKER STAT & ST 2023 — SUM per id_wilayah (fix duplikat baris)
+        $wilkerRows = KecamatanWilkerStat::query()
+            ->select('id_wilayah')
+            ->selectRaw('SUM(bku_wilkerstat) as bku_wilkerstat')
+            ->selectRaw('SUM(st_2023) as st_2023')
+            ->groupBy('id_wilayah')
+            ->get()
+            ->keyBy('id_wilayah');
+
+        // UTP PERTANIAN — SUM per id_wilayah (fix duplikat baris)
+        $utpRows = UtpPertanian::query()
+            ->select('id_wilayah')
+            ->selectRaw('SUM(total_usaha) as total_usaha')
+            ->groupBy('id_wilayah')
+            ->get()
+            ->keyBy('id_wilayah');
+
+        $totalWilkerStat   = $wilkerRows->sum('bku_wilkerstat');
+        $totalST2023       = $wilkerRows->sum('st_2023');
+        $totalUTPPertanian = $utpRows->sum('total_usaha');
+
+        // Merge ketiga sumber di level id_wilayah, susun jadi tree kecamatan -> desa -> sls
+        $allIds = $wilkerRows->keys()
+            ->merge($utpRows->keys())
+            ->merge($progressByWilayah->keys())
+            ->unique();
+
+        $comparisonTree = [];
+        foreach ($allIds as $id) {
+            $w = $wilkerRows->get($id);
+            $u = $utpRows->get($id);
+            $p = $progressByWilayah->get($id);
+            $n = $namaWilayah->get($id); // sumber nama
+
+            $kecamatan = trim($n->kecamatan ?? '') !== '' ? trim($n->kecamatan) : 'Tanpa Kecamatan';
+            $desa      = trim($n->desa ?? '') !== '' ? trim($n->desa) : '';
+            $sls       = trim($n->sls ?? '') !== '' ? trim($n->sls) : '';
+
+            $bku            = $w->bku_wilkerstat ?? 0;
+            $st2023         = $w->st_2023 ?? 0;
+            $utp            = $u->total_usaha ?? 0;
+            $bkuProgress    = $p['bku'] ?? 0;
+            $usahaKeluarga  = $p['usaha_keluarga'] ?? 0;
+
+            $comparisonTree[$kecamatan] ??= [
+                'bku' => 0, 'st_2023' => 0, 'utp' => 0,
+                'bku_progress' => 0, 'usaha_keluarga_progress' => 0,
+                'desa' => [],
+            ];
+            $comparisonTree[$kecamatan]['bku']                      += $bku;
+            $comparisonTree[$kecamatan]['st_2023']                  += $st2023;
+            $comparisonTree[$kecamatan]['utp']                      += $utp;
+            $comparisonTree[$kecamatan]['bku_progress']             += $bkuProgress;
+            $comparisonTree[$kecamatan]['usaha_keluarga_progress']  += $usahaKeluarga;
+
+            $comparisonTree[$kecamatan]['desa'][$desa] ??= [
+                'bku' => 0, 'st_2023' => 0, 'utp' => 0,
+                'bku_progress' => 0, 'usaha_keluarga_progress' => 0,
+                'sls' => [],
+            ];
+            $comparisonTree[$kecamatan]['desa'][$desa]['bku']                     += $bku;
+            $comparisonTree[$kecamatan]['desa'][$desa]['st_2023']                 += $st2023;
+            $comparisonTree[$kecamatan]['desa'][$desa]['utp']                     += $utp;
+            $comparisonTree[$kecamatan]['desa'][$desa]['bku_progress']            += $bkuProgress;
+            $comparisonTree[$kecamatan]['desa'][$desa]['usaha_keluarga_progress'] += $usahaKeluarga;
+
+            $comparisonTree[$kecamatan]['desa'][$desa]['sls'][] = [
+                'sls' => $sls,
+                'id_wilayah' => $id,
+                'bku_wilkerstat' => $bku,
+                'st_2023' => $st2023,
+                'total_usaha' => $utp,
+                'bku_progress' => $bkuProgress,
+                'usaha_keluarga_progress' => $usahaKeluarga,
+            ];
+        }
+        ksort($comparisonTree);
 
         /* FILTER OPTIONS - KECAMATAN */
         $kecamatanOptions = PetugasReference::query()
@@ -416,17 +514,6 @@ class UsahaController extends Controller
 
         //  DATA TABEL PER KECAMATAN / PETUGAS
 
-        $progressData = Usaha::query()
-            ->join('usaha_uploads', 'usaha.upload_id', '=', 'usaha_uploads.id')
-            ->select(
-                'usaha.ppl',
-                'usaha_uploads.upload_date',
-                DB::raw('SUM(usaha.jumlah_usaha_ditemukan_bku + usaha.jumlah_usaha_baru_bku) as bku'),
-                DB::raw('SUM(usaha.jumlah_usaha_ditemukan_usaha_keluarga + usaha.jumlah_usaha_baru_usaha_keluarga) as usaha_keluarga'),
-                DB::raw('SUM(usaha.jumlah_keluarga_ditemukan + usaha.jumlah_keluarga_baru) as keluarga')
-            )
-            ->groupBy('usaha.ppl', 'usaha_uploads.upload_date')
-            ->get();
 
         //  KELOMPOKKAN DATA USAHA: KECAMATAN -> DESA -> PETUGAS
 
@@ -602,6 +689,19 @@ class UsahaController extends Controller
                 }
             }
         }
+        // Gabung dengan $progressTable (BKU/usaha_keluarga progress — tetap level kecamatan)
+        $comparisonTable = [];
+        $semuaKecamatan = collect(array_keys($progressTable))->merge(array_keys($comparisonTree))->unique();
+
+        foreach ($semuaKecamatan as $kecamatan) {
+            // if ($kecamatan === 'Tanpa Kecamatan') continue;
+            $comparisonTable[$kecamatan] = [
+                'totals' => $progressTable[$kecamatan]['totals'] ?? [],
+                'tree'   => $comparisonTree[$kecamatan] ?? ['bku' => 0, 'st_2023' => 0, 'utp' => 0, 'desa' => []],
+            ];
+        }
+        ksort($comparisonTable);
+
         // | HITUNG PERSENTASE PERKEMBANGAN
         // | Dibandingkan dengan tanggal upload sebelumnya
 
@@ -826,7 +926,7 @@ class UsahaController extends Controller
             'percentageComparison' => $percentageComparison,
             'kecamatanOptions' => $kecamatanOptions,
 
-            'wilkerStatMap' => $wilkerStatMap,
+            'comparisonTable' => $comparisonTable,
             'totalWilkerStat' => $totalWilkerStat,
             'totalST2023' => $totalST2023,
             'totalUTPPertanian' => $totalUTPPertanian,

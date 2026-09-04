@@ -5,11 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class KecamatanWilkerStat extends Model
+class UTPPertanian extends Model
 {
     use HasFactory;
 
-    protected $table = 'kecamatan_wilker_stat';
+    protected $table = 'utp_pertanian';
 
     // Buka izin pengisian data dari Laravel:
     protected $fillable = [
@@ -17,7 +17,7 @@ class KecamatanWilkerStat extends Model
         'kecamatan',
         'desa',
         'sls',
-        'bku',
-        'st_2023',
+        'kbli_3digit',
+        'total_usaha',
     ];
 }
