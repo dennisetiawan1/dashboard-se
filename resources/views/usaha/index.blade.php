@@ -1394,15 +1394,15 @@
 
                     {{-- ===== BAGIAN 1: FILTER DATA ===== --}}
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
+                        {{-- <div>
                             <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                                 Tanggal Upload
                             </label>
                             <select name="tanggal"
                                 class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700">
-                               c
+                               
                             </select>
-                        </div>
+                        </div> --}}
                         <div>
                             <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                                 Kecamatan
@@ -2091,8 +2091,8 @@
                             </tr>
 
                             @foreach ($petugasGroups as $namaPetugas => $rows)
-                                <tr x-show="open && openDesa['{{ $desaKey }}']" x-cloak
-                                    class="bg-slate-50 hover:bg-slate-100 transition-colors">
+                                <template x-if="open && openDesa['{{ $desaKey }}']">
+                                <tr class="bg-slate-50 hover:bg-slate-100 transition-colors">
 
                                     <td class="px-5 py-3 pl-14 whitespace-nowrap sticky left-0 z-10 bg-slate-50">
                                         <div class="font-semibold text-slate-600 text-sm">{{ $namaPetugas }}</div>
@@ -2223,10 +2223,11 @@
                                     <td x-show="$store.usahaColumns.pml" x-cloak class="px-5 py-3 bg-slate-50"></td>
                                     <td x-show="$store.usahaColumns.last_update" x-cloak class="px-5 py-3 bg-slate-50"></td>
                                 </tr>
+                                </template>
 
                                 @foreach ($rows as $i => $row)
-                                    <tr x-show="open && openDesa['{{ $desaKey }}']" x-cloak
-                                        class="hover:bg-slate-50 transition-colors">
+                                    <template x-if="open && openDesa['{{ $desaKey }}']">
+                                    <tr class="hover:bg-slate-50 transition-colors">
 
                                         <td class="px-5 py-3 text-slate-400">{{ $i + 1 }}</td>
 
@@ -2375,6 +2376,7 @@
                                         </td>
 
                                     </tr>
+                                    </template>
                                 @endforeach
                             @endforeach
                         @endforeach
