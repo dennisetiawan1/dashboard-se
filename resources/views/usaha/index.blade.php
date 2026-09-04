@@ -834,7 +834,7 @@
 
                            {{-- ROW DESA --}}
                             @foreach (($group['tree']['desa'] ?? []) as $namaDesa => $desaGroup)
-                                @continue(empty(trim($namaDesa ?? '')))
+                                {{-- @continue(empty(trim($namaDesa ?? ''))) --}}
 
                                 @php
                                     $desaKey = $kecKey . '-' . \Illuminate\Support\Str::slug($namaDesa);
