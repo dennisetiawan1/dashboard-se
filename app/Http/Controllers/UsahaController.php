@@ -102,7 +102,7 @@ class UsahaController extends Controller
             $n = $namaWilayah->get($id); // sumber nama
 
             $kecamatan = trim($n->kecamatan ?? '') !== '' ? trim($n->kecamatan) : 'Tanpa Kecamatan';
-            $desa      = trim($n->desa ?? '') !== '' ? trim($n->desa) : '';
+            $desa = trim($n->desa ?? '') !== '' ? trim($n->desa) : 'Tanpa Desa';
             $sls       = trim($n->sls ?? '') !== '' ? trim($n->sls) : '';
 
             $bku            = $w->bku_wilkerstat ?? 0;
