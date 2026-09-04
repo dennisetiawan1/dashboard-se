@@ -843,10 +843,10 @@
                                 @endphp
 
                                 <template x-if="open['{{ $kecKey }}']">
-                                    <tr class="bg-slate-50 cursor-pointer hover:bg-slate-100"
+                                    <tr class="cursor-pointer hover:bg-slate-100"
                                         @click="openDesa['{{ $desaKey }}'] = !openDesa['{{ $desaKey }}']">
-                                        <td class="sticky left-0 z-10 px-5 py-3 pl-10 text-slate-600 bg-slate-50 whitespace-nowrap">
-                                            <span x-text="openDesa['{{ $desaKey }}'] ? '▾' : '▸'"></span> {{ $namaDesa }}
+                                        <td class="sticky left-0 z-10 px-5 py-3 pl-10 text-slate-600 whitespace-nowrap">
+                                            <span x-text="openDesa['{{ $desaKey }}'] ? '▾' : '▸'" class="font-bold text-slate-700"></span> {{ $namaDesa }}
                                         </td>
                                         <td class="px-5 py-3 text-center font-semibold">{{ number_format($desaGroup['bku_progress']) }}</td>
                                         <td class="px-5 py-3 text-center">
