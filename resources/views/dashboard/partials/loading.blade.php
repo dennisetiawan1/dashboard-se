@@ -18,38 +18,229 @@
 <script>
     window.loadingSpinner = {
         show() {
-            document.getElementById('loadingSpinner').style.display = 'flex';
+            const spinner = document.getElementById('loadingSpinner');
+
+            if (spinner) {
+                spinner.style.display = 'flex';
+            }
         },
+
         hide() {
-            document.getElementById('loadingSpinner').style.display = 'none';
+            const spinner = document.getElementById('loadingSpinner');
+
+            if (spinner) {
+                spinner.style.display = 'none';
+            }
         }
     };
+
+    // HIDE LOADING SETELAH HALAMAN SELESAI DIMUAT
 
     window.addEventListener('load', () => {
         loadingSpinner.hide();
     });
 
+    // LINK / NAVIGASI BIASA
+
     document.addEventListener('click', (e) => {
+
         const link = e.target.closest('a');
-        if (link && link.href && !link.href.includes('#') && !link.target) {
+
+        if (
+            link &&
+            link.href &&
+            !link.href.includes('#') &&
+            !link.target &&
+            !link.hasAttribute('download')
+        ) {
             loadingSpinner.show();
         }
+
     });
 
-    document.addEventListener('submit', (e) => {
+    // FORM SUBMIT
+
+    document.addEventListener('submit', async (e) => {
+
         const form = e.target;
-        loadingSpinner.show();
-        
-        // DETECT EXPORT: jika formaction ada export
         const submitBtn = e.submitter;
-        if (submitBtn && submitBtn.hasAttribute('formaction')) {
-            const formAction = submitBtn.getAttribute('formaction');
-            if (formAction.includes('export')) {
-                // Hide setelah 2 detik (file selesai download)
-                setTimeout(() => {
-                    loadingSpinner.hide();
-                }, 2000);
-            }
+
+        if (!submitBtn) {
+            return;
         }
+
+        // CEK APAKAH INI TOMBOL EXPORT
+
+        const formAction = submitBtn.getAttribute('formaction');
+
+        const isExport =
+            formAction &&
+            formAction.toLowerCase().includes('export');
+
+        // BUKAN EXPORT
+
+        if (!isExport) {
+
+            loadingSpinner.show();
+
+            return;
+        }
+
+        // EXPORT
+
+        e.preventDefault();
+
+        loadingSpinner.show();
+
+
+        try {
+
+            // Ambil URL action dari formaction
+            const action = formAction;
+
+            // Ambil method form
+            const method = (
+                form.getAttribute('method') || 'GET'
+            ).toUpperCase();
+
+
+            // Ambil semua data form
+            const formData = new FormData(form);
+
+            let response;
+
+            // POST
+
+            if (method === 'POST') {
+
+                response = await fetch(action, {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+
+            }
+
+            // GET
+
+            else {
+
+                const params = new URLSearchParams(formData);
+
+                const separator = action.includes('?')
+                    ? '&'
+                    : '?';
+
+                response = await fetch(
+                    action + separator + params.toString(),
+                    {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    }
+                );
+
+            }
+
+            // CEK RESPONSE
+
+            if (!response.ok) {
+                throw new Error(
+                    `Export gagal (${response.status})`
+                );
+            }
+
+            // AMBIL FILE
+
+            const blob = await response.blob();
+
+            // AMBIL NAMA FILE
+
+            let filename = 'export.xlsx';
+
+            const disposition =
+                response.headers.get('Content-Disposition');
+
+
+            if (disposition) {
+
+                // filename*=UTF-8''
+                const utf8Match =
+                    disposition.match(
+                        /filename\*=UTF-8''([^;]+)/i
+                    );
+
+                // filename="..."
+                const normalMatch =
+                    disposition.match(
+                        /filename="?([^"]+)"?/i
+                    );
+
+
+                if (utf8Match && utf8Match[1]) {
+
+                    filename = decodeURIComponent(
+                        utf8Match[1]
+                    );
+
+                } else if (
+                    normalMatch &&
+                    normalMatch[1]
+                ) {
+
+                    filename = normalMatch[1];
+
+                }
+
+            }
+
+            // BUAT DOWNLOAD
+
+            const downloadUrl =
+                window.URL.createObjectURL(blob);
+
+
+            const downloadLink =
+                document.createElement('a');
+
+
+            downloadLink.href = downloadUrl;
+            downloadLink.download = filename;
+
+            document.body.appendChild(downloadLink);
+
+            downloadLink.click();
+
+            downloadLink.remove();
+
+
+            // Bersihkan object URL
+            setTimeout(() => {
+                window.URL.revokeObjectURL(downloadUrl);
+            }, 1000);
+
+
+        } catch (error) {
+
+            console.error(
+                'Export error:',
+                error
+            );
+
+            alert(
+                'Gagal melakukan export. Silakan coba lagi.'
+            );
+
+        } finally {
+            // LOADING MATI SETELAH RESPONSE SELESAI
+            loadingSpinner.hide();
+
+        }
+
     });
 </script>
