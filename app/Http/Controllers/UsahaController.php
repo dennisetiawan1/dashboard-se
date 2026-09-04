@@ -1,2595 +1,983 @@
-@extends('layouts.app')
+<?php
 
-@section('title', 'Dashboard Usaha')
+namespace App\Http\Controllers;
 
-@section('content')
-    <script>
-        window.initialUsahaColumnsRaw = @json(request('columns'));
-    document.addEventListener('alpine:init', () => {
-        const defaultColumns = {
-            id_wilayah: true,
-            kd_kab: true,
-            nama_sls: true,
-            ub_prelist: true,
-            um_prelist: true,
-            umk_prelist: true,
-            usaha_ditemukan_bku: true,
-            usaha_ditutup_bku: true,
-            usaha_ganda_bku: true,
-            usaha_tidak_ditemukan_bku: true,
-            usaha_baru_bku: true,
-            usaha_ditemukan_keluarga: true,
-            usaha_tutup_keluarga: true,
-            usaha_ganda_keluarga: true,
-            usaha_tidak_ditemukan_keluarga: true,
-            usaha_baru_keluarga: true,
-            keluarga_ditemukan: true,
-            keluarga_meninggal: true,
-            keluarga_tidak_eligible: true,
-            keluarga_tidak_ditemui: true,
-            keluarga_tidak_ditemukan: true,
-            keluarga_baru: true,
-            prelist_usaha: true,
-            usaha_realisasi: true,
-            prelist_keluarga: true,
-            keluarga_realisasi: true,
-            ppl: true,
-            pml: true,
-            last_update: true,
+use App\Models\PetugasReference;
+use App\Models\Usaha;
+use App\Models\UsahaUpload;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use App\Models\DesaReference;
+use App\Models\KecamatanWilkerStat;
+use App\Models\UtpPertanian;
+
+class UsahaController extends Controller
+{
+    public function index(Request $request)
+    {
+            
+        //  REFERENCE PETUGAS & DESA
+        $referenceMap = PetugasReference::query()
+            ->get([
+                'petugas_username',
+                'nama_petugas',
+                'kode_kecamatan',
+                'nama_kecamatan'
+            ])
+            ->keyBy('petugas_username');
+
+        $desaReferenceMap = DesaReference::query()
+            ->get([
+                'id_wilayah',
+                'nama_desa',
+            ])
+            ->keyBy('id_wilayah');
+
+        // PROGRESS DATA — per petugas + id_wilayah + tanggal upload
+        $progressData = Usaha::query()
+            ->join('usaha_uploads', 'usaha.upload_id', '=', 'usaha_uploads.id')
+            ->select(
+                'usaha.ppl',
+                'usaha.id_wilayah',
+                'usaha_uploads.upload_date',
+                DB::raw('SUM(usaha.jumlah_usaha_ditemukan_bku + usaha.jumlah_usaha_baru_bku) as bku'),
+                DB::raw('SUM(usaha.jumlah_usaha_ditemukan_usaha_keluarga + usaha.jumlah_usaha_baru_usaha_keluarga) as usaha_keluarga'),
+                DB::raw('SUM(usaha.jumlah_keluarga_ditemukan + usaha.jumlah_keluarga_baru) as keluarga')
+            )
+            ->groupBy('usaha.ppl', 'usaha.id_wilayah', 'usaha_uploads.upload_date')
+            ->get();
+
+        // Ambil BKU/usaha_keluarga per id_wilayah, cuma tanggal upload terbaru per wilayah
+        $progressByWilayah = collect($progressData)
+            ->groupBy('id_wilayah')
+            ->map(function ($rows) {
+                $terbaru = $rows->sortByDesc('upload_date')->first();
+                return [
+                    'bku' => (int) $terbaru->bku,
+                    'usaha_keluarga' => (int) $terbaru->usaha_keluarga,
+                ];
+            });
+
+        // WILKER STAT & UTP PERTANIAN — per baris (id_wilayah sampai SLS)
+        // NAMA WILAYAH REFERENSI — kecamatan/desa/sls per id_wilayah (sumber nama = KecamatanWilkerStat)
+        $namaWilayah = KecamatanWilkerStat::query()
+            ->select('id_wilayah', 'kecamatan', 'desa', 'sls')
+            ->groupBy('id_wilayah', 'kecamatan', 'desa', 'sls')
+            ->get()
+            ->keyBy('id_wilayah');
+
+        // WILKER STAT & ST 2023 — SUM per id_wilayah (fix duplikat baris)
+        $wilkerRows = KecamatanWilkerStat::query()
+            ->select('id_wilayah')
+            ->selectRaw('SUM(bku_wilkerstat) as bku_wilkerstat')
+            ->selectRaw('SUM(st_2023) as st_2023')
+            ->groupBy('id_wilayah')
+            ->get()
+            ->keyBy('id_wilayah');
+
+        // UTP PERTANIAN — SUM per id_wilayah (fix duplikat baris)
+        $utpRows = UtpPertanian::query()
+            ->select('id_wilayah')
+            ->selectRaw('SUM(total_usaha) as total_usaha')
+            ->groupBy('id_wilayah')
+            ->get()
+            ->keyBy('id_wilayah');
+
+        $totalWilkerStat   = $wilkerRows->sum('bku_wilkerstat');
+        $totalST2023       = $wilkerRows->sum('st_2023');
+        $totalUTPPertanian = $utpRows->sum('total_usaha');
+
+        // Merge ketiga sumber di level id_wilayah, susun jadi tree kecamatan -> desa -> sls
+        $allIds = $wilkerRows->keys()
+            ->merge($utpRows->keys())
+            ->merge($progressByWilayah->keys())
+            ->unique();
+
+        $comparisonTree = [];
+        foreach ($allIds as $id) {
+            $w = $wilkerRows->get($id);
+            $u = $utpRows->get($id);
+            $p = $progressByWilayah->get($id);
+            $n = $namaWilayah->get($id); // sumber nama
+
+            $kecamatan = trim($n->kecamatan ?? '') !== '' ? trim($n->kecamatan) : 'Tanpa Kecamatan';
+            $desa = trim($n->desa ?? '') !== '' ? trim($n->desa) : 'Tanpa Desa';
+            $sls       = trim($n->sls ?? '') !== '' ? trim($n->sls) : '';
+
+            $bku            = $w->bku_wilkerstat ?? 0;
+            $st2023         = $w->st_2023 ?? 0;
+            $utp            = $u->total_usaha ?? 0;
+            $bkuProgress    = $p['bku'] ?? 0;
+            $usahaKeluarga  = $p['usaha_keluarga'] ?? 0;
+
+            $comparisonTree[$kecamatan] ??= [
+                'bku' => 0, 'st_2023' => 0, 'utp' => 0,
+                'bku_progress' => 0, 'usaha_keluarga_progress' => 0,
+                'desa' => [],
+            ];
+            $comparisonTree[$kecamatan]['bku']                      += $bku;
+            $comparisonTree[$kecamatan]['st_2023']                  += $st2023;
+            $comparisonTree[$kecamatan]['utp']                      += $utp;
+            $comparisonTree[$kecamatan]['bku_progress']             += $bkuProgress;
+            $comparisonTree[$kecamatan]['usaha_keluarga_progress']  += $usahaKeluarga;
+
+            $comparisonTree[$kecamatan]['desa'][$desa] ??= [
+                'bku' => 0, 'st_2023' => 0, 'utp' => 0,
+                'bku_progress' => 0, 'usaha_keluarga_progress' => 0,
+                'sls' => [],
+            ];
+            $comparisonTree[$kecamatan]['desa'][$desa]['bku']                     += $bku;
+            $comparisonTree[$kecamatan]['desa'][$desa]['st_2023']                 += $st2023;
+            $comparisonTree[$kecamatan]['desa'][$desa]['utp']                     += $utp;
+            $comparisonTree[$kecamatan]['desa'][$desa]['bku_progress']            += $bkuProgress;
+            $comparisonTree[$kecamatan]['desa'][$desa]['usaha_keluarga_progress'] += $usahaKeluarga;
+
+            $comparisonTree[$kecamatan]['desa'][$desa]['sls'][] = [
+                'sls' => $sls,
+                'id_wilayah' => $id,
+                'bku_wilkerstat' => $bku,
+                'st_2023' => $st2023,
+                'total_usaha' => $utp,
+                'bku_progress' => $bkuProgress,
+                'usaha_keluarga_progress' => $usahaKeluarga,
+            ];
+        }
+        ksort($comparisonTree);
+
+        /* FILTER OPTIONS - KECAMATAN */
+        $kecamatanOptions = PetugasReference::query()
+            ->whereNotNull('nama_kecamatan')
+            ->where('nama_kecamatan', '!=', '')
+            ->distinct()
+            ->orderBy('nama_kecamatan')
+            ->pluck('nama_kecamatan');
+
+        // Daftar tanggal upload yang tersedia, untuk dropdown filter tanggal
+        $availableUploadDates = UsahaUpload::query()
+            ->orderByDesc('upload_date')
+            ->get()
+            ->pluck('upload_date')
+            ->map(fn($d) => Carbon::parse($d)->format('Y-m-d'))
+            ->unique()
+            ->values();
+
+        // AMBIL UPLOAD SESUAI TANGGAL DIPILIH (atau upload terbaru kalau tidak ada filter tanggal)
+        if ($request->filled('tanggal')) {
+            $latestUpload = UsahaUpload::query()
+                ->where('upload_date', $request->tanggal)
+                ->orderByDesc('id')
+                ->first();
+        } else {
+            $latestUpload = UsahaUpload::query()
+                ->orderByDesc('upload_date')
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        // QUERY USAHA (HANYA UPLOAD TERPILIH)
+
+        $query = Usaha::query();
+
+        if ($latestUpload) {
+            $query->where('upload_id', $latestUpload->id);
+        }
+
+
+        /* FILTER KABUPATEN        */
+
+        if ($request->filled('kd_kab')) {
+            $query->where('kd_kab', $request->kd_kab);
+        }
+
+        /* FILTER SLS        */
+
+        if ($request->filled('nama_sls')) {
+            $query->where('nama_sls', $request->nama_sls);
+        }
+
+        /* FILTER PPL        */
+
+        if ($request->filled('ppl')) {
+            $query->where('ppl', $request->ppl);
+        }
+
+        /* FILTER PML  */
+
+        if ($request->filled('pml')) {
+            $query->where('pml', $request->pml);
+        }
+
+        /* FILTER KECAMATAN */
+        if ($request->filled('nama_kecamatan')) {
+            $usernames = PetugasReference::query()
+                ->where('nama_kecamatan', $request->nama_kecamatan)
+                ->pluck('petugas_username')
+                ->all();
+
+            $query->whereIn('ppl', $usernames);
+        }
+
+        //  DATA USAHA
+        $data = $query
+            ->get()
+            ->groupBy(function ($row) {
+                return implode('|', [
+                    $row->id_wilayah,
+                    $row->kd_kab,
+                    $row->nama_sls,
+                    $row->ppl,
+                    $row->pml,
+                ]);
+            })
+            ->map(function ($rows) use ($referenceMap, $desaReferenceMap) {
+
+                $row = clone $rows->first();
+
+                $row->jumlah_ub_prelist_awal =
+                    $rows->sum('jumlah_ub_prelist_awal');
+
+                $row->jumlah_um_prelist_awal =
+                    $rows->sum('jumlah_um_prelist_awal');
+
+                $row->jumlah_umk_prelist_awal =
+                    $rows->sum('jumlah_umk_prelist_awal');
+
+                $row->jumlah_usaha_ditemukan_bku =
+                    $rows->sum('jumlah_usaha_ditemukan_bku');
+
+                $row->jumlah_usaha_ditutup_bku =
+                    $rows->sum('jumlah_usaha_ditutup_bku');
+
+                $row->jumlah_usaha_ganda_bku =
+                    $rows->sum('jumlah_usaha_ganda_bku');
+
+                $row->jumlah_usaha_tidak_ditemukan_bku =
+                    $rows->sum('jumlah_usaha_tidak_ditemukan_bku');
+
+                $row->jumlah_usaha_baru_bku =
+                    $rows->sum('jumlah_usaha_baru_bku');
+
+                $row->jumlah_usaha_ditemukan_usaha_keluarga =
+                    $rows->sum('jumlah_usaha_ditemukan_usaha_keluarga');
+
+                $row->jumlah_usaha_tutup_usaha_keluarga =
+                    $rows->sum('jumlah_usaha_tutup_usaha_keluarga');
+
+                $row->jumlah_usaha_ganda_usaha_keluarga =
+                    $rows->sum('jumlah_usaha_ganda_usaha_keluarga');
+
+                $row->jumlah_usaha_tidak_ditemukan_usaha_keluarga =
+                    $rows->sum('jumlah_usaha_tidak_ditemukan_usaha_keluarga');
+
+                $row->jumlah_usaha_baru_usaha_keluarga =
+                    $rows->sum('jumlah_usaha_baru_usaha_keluarga');
+
+
+                $row->jumlah_keluarga_ditemukan =
+                    $rows->sum('jumlah_keluarga_ditemukan');
+
+                $row->jumlah_keluarga_meninggal =
+                    $rows->sum('jumlah_keluarga_meninggal');
+
+                $row->jumlah_keluarga_tidak_eligible =
+                    $rows->sum('jumlah_keluarga_tidak_eligible');
+
+                $row->jumlah_keluarga_tidak_ditemui =
+                    $rows->sum('jumlah_keluarga_tidak_ditemui');
+
+                $row->jumlah_keluarga_tidak_ditemukan =
+                    $rows->sum('jumlah_keluarga_tidak_ditemukan');
+
+                $row->jumlah_keluarga_baru =
+                    $rows->sum('jumlah_keluarga_baru');
+
+                $row->jumlah_prelist_usaha =
+                    $rows->sum('jumlah_prelist_usaha');
+
+                $row->jumlah_usaha_realisasi =
+                    $rows->sum('jumlah_usaha_realisasi');
+
+                $row->jumlah_prelist_keluarga =
+                    $rows->sum('jumlah_prelist_keluarga');
+
+                $row->jumlah_keluarga_realisasi =
+                    $rows->sum('jumlah_keluarga_realisasi');
+
+                $ref = $referenceMap->get($row->ppl);
+
+                $row->nama_petugas    = $ref->nama_petugas ?? null;
+                $row->email_petugas   = $ref->petugas_username ?? null;
+                $row->kode_kecamatan  = $ref->kode_kecamatan ?? null;
+                $row->nama_kecamatan  = $ref->nama_kecamatan ?? null;
+
+                $desaRef = $desaReferenceMap->get($row->id_wilayah);
+
+                $row->nama_desa = $desaRef->nama_desa ?? 'Tanpa Desa';
+
+                return $row;
+            })
+            ->sortBy('nama_sls')
+            ->values();
+
+        /*        | SUMMARY AKUMULASI        | Karena $data mengambil seluruh record Usaha, maka sum() otomatis menjumlahkan semua upload.        */
+
+        $summary = [
+            /*  TOTAL USAHA & KELUARGA  */
+
+            'prelist_usaha' =>
+            $data->sum('jumlah_prelist_usaha'),
+
+            'usaha_realisasi' =>
+            $data->sum('jumlah_usaha_realisasi'),
+
+            'prelist_keluarga' =>
+            $data->sum('jumlah_prelist_keluarga'),
+
+            'keluarga_realisasi' =>
+            $data->sum('jumlah_keluarga_realisasi'),
+            /*  BKU  */
+
+            'usaha_ditemukan_bku' =>
+            $data->sum('jumlah_usaha_ditemukan_bku'),
+
+            'usaha_ditutup_bku' =>
+            $data->sum('jumlah_usaha_ditutup_bku'),
+
+            'usaha_ganda_bku' =>
+            $data->sum('jumlah_usaha_ganda_bku'),
+
+            'usaha_tidak_ditemukan_bku' =>
+            $data->sum('jumlah_usaha_tidak_ditemukan_bku'),
+
+            'usaha_baru_bku' =>
+            $data->sum('jumlah_usaha_baru_bku'),
+
+            /* USAHA KELUARGA    */
+
+            'usaha_ditemukan_keluarga' =>
+            $data->sum('jumlah_usaha_ditemukan_usaha_keluarga'),
+
+            'usaha_tutup_keluarga' =>
+            $data->sum('jumlah_usaha_tutup_usaha_keluarga'),
+
+            'usaha_ganda_keluarga' =>
+            $data->sum('jumlah_usaha_ganda_usaha_keluarga'),
+
+            'usaha_tidak_ditemukan_keluarga' =>
+            $data->sum('jumlah_usaha_tidak_ditemukan_usaha_keluarga'),
+
+            'usaha_baru_keluarga' =>
+            $data->sum('jumlah_usaha_baru_usaha_keluarga'),
+
+            /* KELUARGA */
+
+            'keluarga_ditemukan' =>
+            $data->sum('jumlah_keluarga_ditemukan'),
+
+            'keluarga_meninggal' =>
+            $data->sum('jumlah_keluarga_meninggal'),
+
+            'keluarga_tidak_eligible' =>
+            $data->sum('jumlah_keluarga_tidak_eligible'),
+
+            'keluarga_tidak_ditemui' =>
+            $data->sum('jumlah_keluarga_tidak_ditemui'),
+
+            'keluarga_tidak_ditemukan' =>
+            $data->sum('jumlah_keluarga_tidak_ditemukan'),
+
+            'keluarga_baru' =>
+            $data->sum('jumlah_keluarga_baru'),
+        ];
+
+
+        /* FILTER OPTIONS - KABUPATEN       */
+
+        $kabupatenOptions = Usaha::query()
+            ->whereNotNull('kd_kab')
+            ->where('kd_kab', '!=', '')
+            ->distinct()
+            ->orderBy('kd_kab')
+            ->pluck('kd_kab');
+        /* FILTER OPTIONS - SLS        */
+        $slsOptions = Usaha::query()
+            ->whereNotNull('nama_sls')
+            ->where('nama_sls', '!=', '')
+            ->distinct()
+            ->orderBy('nama_sls')
+            ->pluck('nama_sls');
+
+        //    FILTER OPTIONS - PPL
+
+        $pplOptions = Usaha::query()
+            ->join('petugas_references', 'petugas_references.petugas_username', '=', 'usaha.ppl')
+            ->whereNotNull('usaha.ppl')
+            ->where('usaha.ppl', '!=', '')
+            ->select(
+                'petugas_references.petugas_username',
+                'petugas_references.nama_petugas'
+            )
+            ->distinct()
+            ->orderBy('petugas_references.nama_petugas')
+            ->get();
+
+        // FILTER OPTIONS - PML
+
+        $pmlOptions = Usaha::query()
+            ->whereNotNull('pml')
+            ->where('pml', '!=', '')
+            ->distinct()
+            ->orderBy('pml')
+            ->pluck('pml');
+
+        $percentageSummary = [
+
+            'bku' => [
+                'value' => $summary['prelist_usaha'] > 0
+                    ? (
+                        (
+                            $summary['usaha_ditemukan_bku'] +
+                            $summary['usaha_baru_bku']
+                        )
+                        / $summary['prelist_usaha']
+                    ) * 100
+                    : 0,
+
+                'numerator' =>
+                $summary['usaha_ditemukan_bku'] +
+                    $summary['usaha_baru_bku'],
+
+                'denominator' =>
+                $summary['prelist_usaha'],
+            ],
+
+            'usaha_keluarga' => [
+                'value' => $summary['prelist_keluarga'] > 0
+                    ? (
+                        (
+                            $summary['usaha_ditemukan_keluarga'] +
+                            $summary['usaha_baru_keluarga']
+                        )
+                        / $summary['prelist_keluarga']
+                    ) * 100
+                    : 0,
+
+                'numerator' =>
+                $summary['usaha_ditemukan_keluarga'] +
+                    $summary['usaha_baru_keluarga'],
+
+                'denominator' =>
+                $summary['prelist_keluarga'],
+            ],
+
+            'total_usaha' => [
+                'value' => $summary['prelist_keluarga'] > 0
+                    ? (
+                        (
+                            $summary['usaha_ditemukan_bku'] +
+                            $summary['usaha_baru_bku'] +
+                            $summary['usaha_ditemukan_keluarga'] +
+                            $summary['usaha_baru_keluarga']
+                        )
+                        / $summary['prelist_keluarga']
+                    ) * 100
+                    : 0,
+
+                'numerator' =>
+                $summary['usaha_ditemukan_bku'] +
+                    $summary['usaha_baru_bku'] +
+                    $summary['usaha_ditemukan_keluarga'] +
+                    $summary['usaha_baru_keluarga'],
+
+                'denominator' =>
+                $summary['prelist_keluarga'],
+            ],
+
+        ];
+        //  TABEL 1 - PERBANDINGAN BERDASARKAN TANGGAL UPLOAD
+
+        $uploads = UsahaUpload::query()
+            ->orderBy('upload_date')
+            ->get();
+
+        $tanggalUploads = UsahaUpload::query()
+            ->whereNotNull('upload_date')
+            ->orderBy('upload_date')
+            ->pluck('upload_date')
+            ->map(function ($tanggal) {
+                return \Carbon\Carbon::parse($tanggal)->format('Y-m-d');
+            })
+            ->unique()
+            ->values()
+            ->all();
+
+        //  DATA TABEL PER KECAMATAN / PETUGAS
+
+
+        //  KELOMPOKKAN DATA USAHA: KECAMATAN -> DESA -> PETUGAS
+
+        $fields = [
+            'jumlah_ub_prelist_awal',
+            'jumlah_um_prelist_awal',
+            'jumlah_umk_prelist_awal',
+
+            'jumlah_usaha_ditemukan_bku',
+            'jumlah_usaha_ditutup_bku',
+            'jumlah_usaha_ganda_bku',
+            'jumlah_usaha_tidak_ditemukan_bku',
+            'jumlah_usaha_baru_bku',
+
+            'jumlah_usaha_ditemukan_usaha_keluarga',
+            'jumlah_usaha_tutup_usaha_keluarga',
+            'jumlah_usaha_ganda_usaha_keluarga',
+            'jumlah_usaha_tidak_ditemukan_usaha_keluarga',
+            'jumlah_usaha_baru_usaha_keluarga',
+
+            'jumlah_keluarga_ditemukan',
+            'jumlah_keluarga_meninggal',
+            'jumlah_keluarga_tidak_eligible',
+            'jumlah_keluarga_tidak_ditemui',
+            'jumlah_keluarga_tidak_ditemukan',
+            'jumlah_keluarga_baru',
+
+            'jumlah_prelist_usaha',
+            'jumlah_usaha_realisasi',
+            'jumlah_prelist_keluarga',
+            'jumlah_keluarga_realisasi',
+        ];
+
+        $dataGrouped = $data
+            ->groupBy(function ($row) {
+                return $row->nama_kecamatan ?: 'Tanpa Kecamatan';
+            })
+            ->map(function ($rowsByKecamatan) use ($fields) {
+
+                $kecamatanTotals = [];
+                foreach ($fields as $field) {
+                    $kecamatanTotals[$field] = $rowsByKecamatan->sum($field);
+                }
+
+                $desaGroups = $rowsByKecamatan
+                    ->groupBy(function ($row) {
+                        return $row->nama_desa ?: 'Tanpa Desa';
+                    })
+                    ->map(function ($rowsByDesa) use ($fields) {
+
+                        $desaTotals = [];
+                        foreach ($fields as $field) {
+                            $desaTotals[$field] = $rowsByDesa->sum($field);
+                        }
+
+                        $petugas = $rowsByDesa
+                            ->groupBy(function ($row) {
+                                return $row->nama_petugas
+                                    ?: ($row->ppl ?: 'Tanpa Petugas');
+                            });
+
+                        return [
+                            'totals'  => $desaTotals,
+                            'petugas' => $petugas,
+                        ];
+                    })
+                    ->sortKeys();
+
+                return [
+                    'totals' => $kecamatanTotals,
+                    'desa'   => $desaGroups,
+                ];
+            })
+            ->sortKeys();
+
+
+        $grandTotals = [];
+
+        $fields = [
+            'jumlah_ub_prelist_awal',
+            'jumlah_um_prelist_awal',
+            'jumlah_umk_prelist_awal',
+
+            'jumlah_usaha_ditemukan_bku',
+            'jumlah_usaha_ditutup_bku',
+            'jumlah_usaha_ganda_bku',
+            'jumlah_usaha_tidak_ditemukan_bku',
+            'jumlah_usaha_baru_bku',
+
+            'jumlah_usaha_ditemukan_usaha_keluarga',
+            'jumlah_usaha_tutup_usaha_keluarga',
+            'jumlah_usaha_ganda_usaha_keluarga',
+            'jumlah_usaha_tidak_ditemukan_usaha_keluarga',
+            'jumlah_usaha_baru_usaha_keluarga',
+
+            'jumlah_keluarga_ditemukan',
+            'jumlah_keluarga_meninggal',
+            'jumlah_keluarga_tidak_eligible',
+            'jumlah_keluarga_tidak_ditemui',
+            'jumlah_keluarga_tidak_ditemukan',
+            'jumlah_keluarga_baru',
+
+            'jumlah_prelist_usaha',
+            'jumlah_usaha_realisasi',
+            'jumlah_prelist_keluarga',
+            'jumlah_keluarga_realisasi',
+        ];
+
+        foreach ($fields as $field) {
+            $grandTotals[$field] = $data->sum($field);
+        }
+        //  KELOMPOKKAN: KECAMATAN -> PETUGAS -> TANGGAL
+
+        $progressTable = [];
+
+        foreach ($progressData as $row) {
+
+            $ref = $referenceMap->get($row->ppl);
+
+            $namaKecamatan = $ref->nama_kecamatan ?? 'Tanpa Kecamatan';
+            $namaPetugas   = $ref->nama_petugas ?? ($row->ppl ?: 'Tanpa Petugas');
+
+            $tanggal = \Carbon\Carbon::parse($row->upload_date)->format('Y-m-d');
+
+            $cell = [
+                'bku' => (int) $row->bku,
+                'usaha_keluarga' => (int) $row->usaha_keluarga,
+                'keluarga' => (int) $row->keluarga,
+            ];
+
+            if (!isset($progressTable[$namaKecamatan])) {
+                $progressTable[$namaKecamatan] = [
+                    'totals' => [],
+                    'petugas' => [],
+                ];
+            }
+
+            $progressTable[$namaKecamatan]['petugas'][$namaPetugas][$tanggal] = $cell;
+
+            if (!isset($progressTable[$namaKecamatan]['totals'][$tanggal])) {
+                $progressTable[$namaKecamatan]['totals'][$tanggal] = [
+                    'bku' => 0,
+                    'usaha_keluarga' => 0,
+                    'keluarga' => 0,
+                ];
+            }
+
+            $progressTable[$namaKecamatan]['totals'][$tanggal]['bku'] += $cell['bku'];
+            $progressTable[$namaKecamatan]['totals'][$tanggal]['usaha_keluarga'] += $cell['usaha_keluarga'];
+            $progressTable[$namaKecamatan]['totals'][$tanggal]['keluarga'] += $cell['keluarga'];
+        }
+
+        ksort($progressTable);
+
+        $progressGrandTotals = [];
+
+        foreach ($tanggalUploads as $tanggal) {
+            $tanggalKey = \Carbon\Carbon::parse($tanggal)->format('Y-m-d');
+
+            $progressGrandTotals[$tanggalKey] = [
+                'bku' => 0,
+                'usaha_keluarga' => 0,
+                'keluarga' => 0,
+            ];
+
+            foreach ($progressTable as $group) {
+                $item = $group['totals'][$tanggalKey] ?? null;
+
+                if ($item) {
+                    $progressGrandTotals[$tanggalKey]['bku'] += $item['bku'];
+                    $progressGrandTotals[$tanggalKey]['usaha_keluarga'] += $item['usaha_keluarga'];
+                    $progressGrandTotals[$tanggalKey]['keluarga'] += $item['keluarga'];
+                }
+            }
+        }
+        // Gabung dengan $progressTable (BKU/usaha_keluarga progress — tetap level kecamatan)
+        $comparisonTable = [];
+        $semuaKecamatan = collect(array_keys($progressTable))->merge(array_keys($comparisonTree))->unique();
+
+        foreach ($semuaKecamatan as $kecamatan) {
+            // if ($kecamatan === 'Tanpa Kecamatan') continue;
+            $comparisonTable[$kecamatan] = [
+                'totals' => $progressTable[$kecamatan]['totals'] ?? [],
+                'tree'   => $comparisonTree[$kecamatan] ?? ['bku' => 0, 'st_2023' => 0, 'utp' => 0, 'desa' => []],
+            ];
+        }
+        ksort($comparisonTable);
+
+        // | HITUNG PERSENTASE PERKEMBANGAN
+        // | Dibandingkan dengan tanggal upload sebelumnya
+
+        $hitungProgress = function ($data) {
+
+            $tanggalKeys = collect($data)
+                ->keys()
+                ->sort()
+                ->values();
+
+            foreach ($tanggalKeys as $index => $tanggal) {
+
+                /* TANGGAL PERTAMA        */
+
+                if ($index === 0) {
+
+                    $data[$tanggal]['percentage'] = [
+                        'bku' => null,
+                        'usaha_keluarga' => null,
+                        'keluarga' => null,
+                    ];
+
+                    $data[$tanggal]['trend'] = [
+                        'bku' => 'none',
+                        'usaha_keluarga' => 'none',
+                        'keluarga' => 'none',
+                    ];
+
+                    continue;
+                }
+
+                // | TANGGAL SEBELUMNYA
+
+                $tanggalSebelumnya = $tanggalKeys[$index - 1];
+
+                $sekarang = $data[$tanggal];
+
+                $sebelumnya = $data[$tanggalSebelumnya];
+
+                //  FUNCTION HITUNG PERSENTASE        
+
+                $hitungPersen = function ($sekarang, $sebelumnya) {
+                    if ($sebelumnya == 0) {
+                        return null;
+                    }
+
+                    if ($sebelumnya == 0 && $sekarang > 0) {
+                        return 100;
+                    }
+
+                    if ($sebelumnya > 0 && $sekarang == 0) {
+                        return -100;
+                    }
+
+                    return (($sekarang - $sebelumnya) / $sebelumnya) * 100;
+                };
+
+                // | HITUNG BKU
+
+                $persenBku = $hitungPersen(
+                    $sekarang['bku'],
+                    $sebelumnya['bku']
+                );
+
+
+                // | HITUNG USAHA KELUARGA
+
+                $persenUsahaKeluarga = $hitungPersen(
+                    $sekarang['usaha_keluarga'],
+                    $sebelumnya['usaha_keluarga']
+                );
+
+                // | HITUNG KELUARGA
+                $persenKeluarga = $hitungPersen(
+                    $sekarang['keluarga'],
+                    $sebelumnya['keluarga']
+                );
+
+
+                // |SIMPAN PERSENTASE
+
+                $data[$tanggal]['percentage'] = [
+
+                    'bku' => $persenBku,
+
+                    'usaha_keluarga' => $persenUsahaKeluarga,
+
+                    'keluarga' => $persenKeluarga,
+
+                ];
+
+                // | SIMPAN TREND
+
+                $data[$tanggal]['trend'] = [
+
+                    'bku' => $persenBku > 0
+                        ? 'up'
+                        : ($persenBku < 0 ? 'down' : 'same'),
+
+                    'usaha_keluarga' => $persenUsahaKeluarga > 0
+                        ? 'up'
+                        : ($persenUsahaKeluarga < 0 ? 'down' : 'same'),
+
+                    'keluarga' => $persenKeluarga > 0
+                        ? 'up'
+                        : ($persenKeluarga < 0 ? 'down' : 'same'),
+
+                ];
+            }
+
+
+            return $data;
         };
 
-        let initialColumns = { ...defaultColumns };
+        //  TERAPKAN PERSENTASE KE TOTAL KECAMATAN
 
-        // Kalau URL bawa parameter "columns" (hasil submit filter sebelumnya), pakai itu
-        if (window.initialUsahaColumnsRaw) {
-            try {
-                const activeList = JSON.parse(window.initialUsahaColumnsRaw);
-                if (Array.isArray(activeList)) {
-                    Object.keys(defaultColumns).forEach(k => {
-                        initialColumns[k] = activeList.includes(k);
-                    });
-                }
-            } catch (e) {
-                // biarkan default kalau parsing gagal
+        foreach ($progressTable as $namaKecamatan => &$kecamatanData) {
+
+            // | TOTAL KECAMATAN
+
+            $kecamatanData['totals'] = $hitungProgress(
+                $kecamatanData['totals']
+            );
+
+
+            //  PER PETUGAS
+
+            foreach (
+                $kecamatanData['petugas']
+                as $namaPetugas => &$petugasData
+            ) {
+
+                $petugasData = $hitungProgress(
+                    $petugasData
+                );
+            }
+
+            unset($petugasData);
+        }
+
+        unset($kecamatanData);
+        //  UBAH JADI KUMULATIF (AKUMULASI SAMPAI TANGGAL TERSEBUT)
+
+        $sortedTanggal = collect($tanggalUploads)
+            ->map(fn($t) => \Carbon\Carbon::parse($t)->format('Y-m-d'))
+            ->values()
+            ->all();
+
+        $tanggalUploads = collect($sortedTanggal)
+            ->slice(-3)
+            ->values()
+            ->all();
+
+        // ----- Cari upload sebelumnya (untuk perbandingan naik/turun) -----
+        $previousUpload = UsahaUpload::query()
+            ->when($latestUpload, fn($q) => $q->where('upload_date', '<', $latestUpload->upload_date))
+            ->orderByDesc('upload_date')
+            ->orderByDesc('id')
+            ->first();
+
+        $previousSums = $this->sumUsahaFieldsForUpload(optional($previousUpload)->id, $fields, $request);
+
+        $summaryComparison = [
+            'usaha_ditemukan_bku' => $grandTotals['jumlah_usaha_ditemukan_bku'] - $previousSums['jumlah_usaha_ditemukan_bku'],
+            'usaha_ditutup_bku' => $grandTotals['jumlah_usaha_ditutup_bku'] - $previousSums['jumlah_usaha_ditutup_bku'],
+            'usaha_ganda_bku' => $grandTotals['jumlah_usaha_ganda_bku'] - $previousSums['jumlah_usaha_ganda_bku'],
+            'usaha_tidak_ditemukan_bku' => $grandTotals['jumlah_usaha_tidak_ditemukan_bku'] - $previousSums['jumlah_usaha_tidak_ditemukan_bku'],
+            'usaha_baru_bku' => $grandTotals['jumlah_usaha_baru_bku'] - $previousSums['jumlah_usaha_baru_bku'],
+
+            'usaha_ditemukan_keluarga' => $grandTotals['jumlah_usaha_ditemukan_usaha_keluarga'] - $previousSums['jumlah_usaha_ditemukan_usaha_keluarga'],
+            'usaha_tutup_keluarga' => $grandTotals['jumlah_usaha_tutup_usaha_keluarga'] - $previousSums['jumlah_usaha_tutup_usaha_keluarga'],
+            'usaha_ganda_keluarga' => $grandTotals['jumlah_usaha_ganda_usaha_keluarga'] - $previousSums['jumlah_usaha_ganda_usaha_keluarga'],
+            'usaha_tidak_ditemukan_keluarga' => $grandTotals['jumlah_usaha_tidak_ditemukan_usaha_keluarga'] - $previousSums['jumlah_usaha_tidak_ditemukan_usaha_keluarga'],
+            'usaha_baru_keluarga' => $grandTotals['jumlah_usaha_baru_usaha_keluarga'] - $previousSums['jumlah_usaha_baru_usaha_keluarga'],
+
+            'keluarga_ditemukan' => $grandTotals['jumlah_keluarga_ditemukan'] - $previousSums['jumlah_keluarga_ditemukan'],
+            'keluarga_meninggal' => $grandTotals['jumlah_keluarga_meninggal'] - $previousSums['jumlah_keluarga_meninggal'],
+            'keluarga_tidak_eligible' => $grandTotals['jumlah_keluarga_tidak_eligible'] - $previousSums['jumlah_keluarga_tidak_eligible'],
+            'keluarga_tidak_ditemui' => $grandTotals['jumlah_keluarga_tidak_ditemui'] - $previousSums['jumlah_keluarga_tidak_ditemui'],
+            'keluarga_tidak_ditemukan' => $grandTotals['jumlah_keluarga_tidak_ditemukan'] - $previousSums['jumlah_keluarga_tidak_ditemukan'],
+            'keluarga_baru' => $grandTotals['jumlah_keluarga_baru'] - $previousSums['jumlah_keluarga_baru'],
+
+        ];
+
+        // ----- Hitung persentase versi upload sebelumnya (untuk delta) -----
+        $prevBkuNumerator = $previousSums['jumlah_usaha_ditemukan_bku'] + $previousSums['jumlah_usaha_baru_bku'];
+        $prevBkuDenominator = $previousSums['jumlah_prelist_usaha'];
+        $prevBkuValue = $prevBkuDenominator > 0 ? ($prevBkuNumerator / $prevBkuDenominator) * 100 : 0;
+
+        $prevUsahaKeluargaNumerator = $previousSums['jumlah_usaha_ditemukan_usaha_keluarga'] + $previousSums['jumlah_usaha_baru_usaha_keluarga'];
+        $prevUsahaKeluargaDenominator = $previousSums['jumlah_prelist_keluarga'];
+        $prevUsahaKeluargaValue = $prevUsahaKeluargaDenominator > 0 ? ($prevUsahaKeluargaNumerator / $prevUsahaKeluargaDenominator) * 100 : 0;
+
+        $prevTotalUsahaNumerator = $previousSums['jumlah_usaha_ditemukan_bku'] + $previousSums['jumlah_usaha_baru_bku']
+            + $previousSums['jumlah_usaha_ditemukan_usaha_keluarga'] + $previousSums['jumlah_usaha_baru_usaha_keluarga'];
+        $prevTotalUsahaDenominator = $previousSums['jumlah_prelist_keluarga'];
+        $prevTotalUsahaValue = $prevTotalUsahaDenominator > 0 ? ($prevTotalUsahaNumerator / $prevTotalUsahaDenominator) * 100 : 0;
+
+        $percentageComparison = [
+            'bku' => $percentageSummary['bku']['value'] - $prevBkuValue,
+            'usaha_keluarga' => $percentageSummary['usaha_keluarga']['value'] - $prevUsahaKeluargaValue,
+            'total_usaha' => $percentageSummary['total_usaha']['value'] - $prevTotalUsahaValue,
+        ];
+
+        return view('usaha.index', [
+            'data' => $data,
+            'summary' => $summary,
+            'percentageSummary' => $percentageSummary,
+
+            'kabupatenOptions' => $kabupatenOptions,
+            'slsOptions' => $slsOptions,
+            'pplOptions' => $pplOptions,
+            'pmlOptions' => $pmlOptions,
+
+            'progressTable' => $progressTable,
+            'tanggalUploads' => $tanggalUploads,
+            'availableUploadDates' => $availableUploadDates,
+            'dataGrouped' => $dataGrouped,
+            'grandTotals' => $grandTotals,
+            'progressGrandTotals' => $progressGrandTotals,
+            'summaryComparison' => $summaryComparison,
+            'percentageComparison' => $percentageComparison,
+            'kecamatanOptions' => $kecamatanOptions,
+
+            'comparisonTable' => $comparisonTable,
+            'totalWilkerStat' => $totalWilkerStat,
+            'totalST2023' => $totalST2023,
+            'totalUTPPertanian' => $totalUTPPertanian,
+        ]);
+    }
+    private function sumUsahaFieldsForUpload(?int $uploadId, array $fields, Request $request): array
+    {
+        if (!$uploadId) {
+            return array_fill_keys($fields, 0);
+        }
+
+        $query = Usaha::query()->where('upload_id', $uploadId);
+
+        if ($request->filled('kd_kab')) {
+            $query->where('kd_kab', $request->kd_kab);
+        }
+        if ($request->filled('nama_sls')) {
+            $query->where('nama_sls', $request->nama_sls);
+        }
+        if ($request->filled('ppl')) {
+            $query->where('ppl', $request->ppl);
+        }
+        if ($request->filled('pml')) {
+            $query->where('pml', $request->pml);
+        }
+        if ($request->filled('nama_kecamatan')) {
+            $usernames = PetugasReference::query()
+                ->where('nama_kecamatan', $request->nama_kecamatan)
+                ->pluck('petugas_username')
+                ->all();
+            $query->whereIn('ppl', $usernames);
+        }
+
+        // Dedup dulu per kombinasi unik lewat SQL subquery, baru SUM
+        $selectFields = implode(', ', array_map(fn($f) => "MAX($f) as $f", $fields));
+
+        $deduped = DB::table(DB::raw("({$query->select(array_merge(
+            ['id_wilayah', 'kd_kab', 'nama_sls', 'ppl', 'pml'],$fields
+        ))->toSql()}) as dedup"))
+            ->mergeBindings($query->getQuery())
+            ->groupBy('id_wilayah', 'kd_kab', 'nama_sls', 'ppl', 'pml')
+            ->selectRaw($selectFields)
+            ->get();
+
+        $sums = array_fill_keys($fields, 0);
+        foreach ($deduped as $row) {
+            foreach ($fields as $field) {
+                $sums[$field] += $row->{$field};
             }
         }
 
-        Alpine.store('usahaColumns', {
-            ...initialColumns,
-
-            draft: {},
-
-            keys() {
-                return Object.keys(defaultColumns);
-            },
-            visibleCount() {
-                return this.keys().filter(k => this[k]).length;
-            },
-            visibleColumns() {
-                return this.keys().filter(k => this[k]);
-            },
-            initDraft() {
-                this.keys().forEach(k => this.draft[k] = this[k]);
-            },
-            draftShowAll() {
-                this.keys().forEach(k => this.draft[k] = true);
-            },
-            draftHideAll() {
-                this.keys().forEach(k => this.draft[k] = false);
-            },
-            applyDraft() {
-                this.keys().forEach(k => this[k] = this.draft[k]);
-            }
-        });
-
-        Alpine.store('usahaColumns').initDraft();
-    });
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const form = document.querySelector('form[action="{{ route('usaha') }}"]');
-            const exportColumns = document.getElementById('exportColumns');
-
-            if (!form || !exportColumns) return;
-
-            form.addEventListener('submit', function (e) {
-                if (e.submitter?.formAction.includes('{{ route('export.usaha.grouped') }}')) {
-                    exportColumns.value = JSON.stringify(
-                        Alpine.store('usahaColumns').visibleColumns()
-                    );
-                }
-            });
-        });
-
-        (function () {
-            const url = new URL(window.location.href);
-            const hasFilters = [...url.searchParams.keys()].length > 0;
-
-            if (!hasFilters) return;
-
-            const navEntries = performance.getEntriesByType('navigation');
-            const isReload = navEntries.length > 0 && navEntries[0].type === 'reload';
-
-            if (isReload) {
-                window.location.replace(url.pathname);
-            }
-        })();
-    </script>
-
-    <div class="space-y-6">
-
-        {{-- =========================================================
-         SWITCH DASHBOARD
-    ========================================================== --}}
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-2">
-
-            <div class="flex gap-2">
-
-                <a href="{{ route('dashboard') }}"
-                    class="flex-1 text-center rounded-xl px-5 py-3 text-sm font-semibold
-                       bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
-                    Assignment
-                </a>
-
-                <a href="{{ route('usaha') }}"
-                    class="flex-1 text-center rounded-xl px-5 py-3 text-sm font-semibold
-                       bg-sky-600 text-white shadow-sm">
-                    Usaha
-                </a>
-
-            </div>
-
-        </div>
-
-
-        {{-- =========================================================
-         HEADER
-    ========================================================== --}}
-        <div>
-            <h1 class="text-2xl font-bold text-slate-800">
-                Dashboard Usaha
-            </h1>
-
-            <p class="mt-1 text-sm text-slate-500">
-                Ringkasan data usaha dan keluarga berdasarkan data yang tersedia.
-            </p>
-        </div>
-
-     {{-- KPI PERSENTASE --}}
-
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
-
-        {{-- ================= PERSENTASE BKU ================= --}}
-        <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-600 p-6 shadow-md">
-            <div class="absolute -right-12 -bottom-12 w-44 h-44 rounded-full bg-white/10"></div>
-            <div class="absolute right-8 top-8 w-20 h-20 rounded-full border border-white/10"></div>
-
-            <div class="relative z-10">
-
-                <div class="flex items-center justify-between">
-                    <p class="text-sky-100 text-xs font-semibold uppercase tracking-widest">
-                        Persentase BKU
-                    </p>
-
-                    @php $delta = $percentageComparison['bku'] ?? 0; @endphp
-                    <div class="flex items-center gap-1 pl-2 pr-2.5 py-1 rounded-full bg-white shadow-sm
-                        {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-                            @if ($delta > 0)
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
-                            @elseif ($delta < 0)
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-                            @else
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14" />
-                            @endif
-                        </svg>
-                        <span class="text-xs font-bold">{{ number_format(abs($delta), 2) }}%</span>
-                    </div>
-                </div>
-
-                <div class="mt-3 text-4xl font-extrabold text-white leading-none">
-                    {{ number_format($percentageSummary['bku']['value'], 2) }}%
-                </div>
-
-                <div class="mt-5 pt-4 border-t border-white/20 text-sm text-sky-100">
-                    <strong class="text-white">{{ number_format($percentageSummary['bku']['numerator']) }}</strong>
-                    BKU ditemukan &amp; baru dari
-                    <strong class="text-white">{{ number_format($percentageSummary['bku']['denominator']) }}</strong>
-                    prelist usaha
-                </div>
-
-            </div>
-        </div>
-
-        {{-- ================= PERSENTASE USAHA KELUARGA ================= --}}
-        <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 to-green-700 p-6 shadow-md">
-            <div class="absolute -right-12 -bottom-12 w-44 h-44 rounded-full bg-white/10"></div>
-            <div class="absolute right-8 top-8 w-20 h-20 rounded-full border border-white/10"></div>
-
-            <div class="relative z-10">
-
-                <div class="flex items-center justify-between">
-                    <p class="text-emerald-100 text-xs font-semibold uppercase tracking-widest">
-                        Persentase Usaha Keluarga
-                    </p>
-
-                    @php $delta = $percentageComparison['usaha_keluarga'] ?? 0; @endphp
-                    <div class="flex items-center gap-1 pl-2 pr-2.5 py-1 rounded-full bg-white shadow-sm
-                        {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-                            @if ($delta > 0)
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
-                            @elseif ($delta < 0)
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-                            @else
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14" />
-                            @endif
-                        </svg>
-                        <span class="text-xs font-bold">{{ number_format(abs($delta), 2) }}%</span>
-                    </div>
-                </div>
-
-                <div class="mt-3 text-4xl font-extrabold text-white leading-none">
-                    {{ number_format($percentageSummary['usaha_keluarga']['value'], 2) }}%
-                </div>
-
-                <div class="mt-5 pt-4 border-t border-white/20 text-sm text-emerald-100">
-                    <strong class="text-white">{{ number_format($percentageSummary['usaha_keluarga']['numerator']) }}</strong>
-                    Usaha Keluarga ditemukan &amp; baru dari
-                    <strong class="text-white">{{ number_format($percentageSummary['usaha_keluarga']['denominator']) }}</strong>
-                    prelist keluarga
-                </div>
-
-            </div>
-        </div>
-
-        {{-- ================= PERSENTASE TOTAL USAHA ================= --}}
-        <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-violet-500 to-purple-700 p-6 shadow-md">
-            <div class="absolute -right-12 -bottom-12 w-44 h-44 rounded-full bg-white/10"></div>
-            <div class="absolute right-8 top-8 w-20 h-20 rounded-full border border-white/10"></div>
-
-            <div class="relative z-10">
-
-                <div class="flex items-center justify-between">
-                    <p class="text-violet-100 text-xs font-semibold uppercase tracking-widest">
-                        Persentase Total Usaha
-                    </p>
-
-                    @php $delta = $percentageComparison['total_usaha'] ?? 0; @endphp
-                    <div class="flex items-center gap-1 pl-2 pr-2.5 py-1 rounded-full bg-white shadow-sm
-                        {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-                            @if ($delta > 0)
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
-                            @elseif ($delta < 0)
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-                            @else
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14" />
-                            @endif
-                        </svg>
-                        <span class="text-xs font-bold">{{ number_format(abs($delta), 2) }}%</span>
-                    </div>
-                </div>
-
-                <div class="mt-3 text-4xl font-extrabold text-white leading-none">
-                    {{ number_format($percentageSummary['total_usaha']['value'], 2) }}%
-                </div>
-
-                <div class="mt-5 pt-4 border-t border-white/20 text-sm text-violet-100">
-                    <strong class="text-white">{{ number_format($percentageSummary['total_usaha']['numerator']) }}</strong>
-                    BKU dan usaha keluarga dari
-                    <strong class="text-white">{{ number_format($percentageSummary['total_usaha']['denominator']) }}</strong>
-                    prelist keluarga
-                </div>
-
-            </div>
-        </div>
-
-    </div>
-
-        <div>
-            <div class="mb-4">
-
-                <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide">
-                    Status Usaha BKU
-                </h2>
-
-            </div>
-
-            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-5">
-
-                {{-- Ditemukan --}}
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="w-11 h-11 rounded-xl bg-emerald-100 flex items-center justify-center mb-4">
-
-                        <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                            stroke-width="2">
-
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-
-                        </svg>
-
-                    </div>
-
-                    <div class="text-xs font-extrabold uppercase tracking-wide text-emerald-600">
-                        Ditemukan
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['usaha_ditemukan_bku']) }}
-                    </div>
-
-                    @php $delta = $summaryComparison['usaha_ditemukan_bku'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-                {{-- Ditutup --}}
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center mb-4">
-
-                        <svg class="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                            stroke-width="2">
-
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-
-                        </svg>
-
-                    </div>
-
-                    <div class="text-xs font-extrabold uppercase tracking-wide text-red-600">
-                        tutup
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['usaha_ditutup_bku']) }}
-                    </div>
-                    @php $delta = $summaryComparison['usaha_ditutup_bku'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-
-                {{-- Ganda --}}
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center mb-4">
-
-                        <svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                            stroke-width="2">
-
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h8m-8 4h8m-8 4h5" />
-
-                        </svg>
-
-                    </div>
-
-                    <div class="text-xs font-extrabold uppercase tracking-wide text-amber-600">
-                        Ganda
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['usaha_ganda_bku']) }}
-                    </div>
-                    @php $delta = $summaryComparison['usaha_ganda_bku'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-                {{-- Tidak Ditemukan --}}
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center mb-4">
-
-                        <svg class="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                            stroke-width="2">
-
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M18 12H6" />
-
-                        </svg>
-
-                    </div>
-
-                    <div class="text-xs font-extrabold uppercase tracking-wide text-slate-600">
-                        Tidak Ditemukan
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['usaha_tidak_ditemukan_bku']) }}
-                    </div>
-                    @php $delta = $summaryComparison['usaha_tidak_ditemukan_bku'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-                {{-- Baru --}}
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center mb-4">
-
-                        <svg class="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                            stroke-width="2">
-
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-
-                        </svg>
-
-                    </div>
-
-                    <div class="text-xs font-extrabold uppercase tracking-wide text-blue-600">
-                        Usaha Baru
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['usaha_baru_bku']) }}
-                    </div>
-                    @php $delta = $summaryComparison['usaha_baru_bku'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-            </div>
-
-        </div>
-
-        <div>
-            <div class="mb-4">
-
-                <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide">
-                    Status Usaha Keluarga
-                </h2>
-
-            </div>
-
-            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-5">
-
-                {{-- Ditemukan --}}
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="w-11 h-11 rounded-xl bg-emerald-100 flex items-center justify-center mb-4">
-
-                        <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                            stroke-width="2">
-
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-
-                        </svg>
-
-                    </div>
-
-                    <div class="text-xs font-extrabold uppercase tracking-wide text-emerald-600">
-                        Ditemukan
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['usaha_ditemukan_keluarga']) }}
-                    </div>
-                    @php $delta = $summaryComparison['usaha_ditemukan_keluarga'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-                {{-- Tutup --}}
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center mb-4">
-
-                        <svg class="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                            stroke-width="2">
-
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-
-                        </svg>
-
-                    </div>
-
-                    <div class="text-xs font-extrabold uppercase tracking-wide text-red-600">
-                        Tutup
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['usaha_tutup_keluarga']) }}
-                    </div>
-                    @php $delta = $summaryComparison['usaha_tutup_keluarga'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-                {{-- Ganda --}}
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center mb-4">
-
-                        <svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                            stroke-width="2">
-
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h8m-8 4h8m-8 4h5" />
-
-                        </svg>
-
-                    </div>
-
-                    <div class="text-xs font-extrabold uppercase tracking-wide text-amber-600">
-                        Ganda
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['usaha_ganda_keluarga']) }}
-                    </div>
-                    @php $delta = $summaryComparison['usaha_ganda_keluarga'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-                {{-- Tidak Ditemukan --}}
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center mb-4">
-
-                        <svg class="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                            stroke-width="2">
-
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M18 12H6" />
-
-                        </svg>
-
-                    </div>
-
-                    <div class="text-xs font-extrabold uppercase tracking-wide text-slate-600">
-                        Tidak Ditemukan
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['usaha_tidak_ditemukan_keluarga']) }}
-                    </div>
-                    @php $delta = $summaryComparison['usaha_tidak_ditemukan_keluarga'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-                {{-- Baru --}}
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center mb-4">
-
-                        <svg class="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                            stroke-width="2">
-
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-
-                        </svg>
-
-                    </div>
-
-                    <div class="text-xs font-extrabold uppercase tracking-wide text-blue-600">
-                        Usaha Baru
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['usaha_baru_keluarga']) }}
-                    </div>
-                    @php $delta = $summaryComparison['usaha_baru_keluarga'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-            </div>
-
-        </div>
-
-        <div>
-            <div class="mb-4">
-
-                <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide">
-                    Status Keluarga
-                </h2>
-
-            </div>
-
-            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-5">
-
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="text-xs font-extrabold uppercase text-emerald-600">
-                        Ditemukan
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['keluarga_ditemukan']) }}
-                    </div>
-                    @php $delta = $summaryComparison['keluarga_ditemukan'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="text-xs font-extrabold uppercase text-red-600">
-                        Meninggal
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['keluarga_meninggal']) }}
-                    </div>
-                    @php $delta = $summaryComparison['keluarga_meninggal'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="text-xs font-extrabold uppercase text-amber-600">
-                        Tidak Eligible
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['keluarga_tidak_eligible']) }}
-                    </div>
-                    @php $delta = $summaryComparison['keluarga_tidak_eligible'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="text-xs font-extrabold uppercase text-orange-600">
-                        Tidak Ditemui
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['keluarga_tidak_ditemui']) }}
-                    </div>
-                    @php $delta = $summaryComparison['keluarga_tidak_ditemui'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="text-xs font-extrabold uppercase text-slate-600">
-                        Tidak Ditemukan
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['keluarga_tidak_ditemukan']) }}
-                    </div>
-                    @php $delta = $summaryComparison['keluarga_tidak_ditemukan'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-                    <div class="text-xs font-extrabold uppercase text-blue-600">
-                        Keluarga Baru
-                    </div>
-
-                    <div class="mt-2 text-2xl font-bold text-slate-800">
-                        {{ number_format($summary['keluarga_baru']) }}
-                    </div>
-                    @php $delta = $summaryComparison['keluarga_baru'] ?? 0; @endphp
-                    <div class="mt-1 text-xs font-semibold {{ $delta > 0 ? 'text-emerald-600' : ($delta < 0 ? 'text-red-600' : 'text-slate-400') }}">
-                        {{ $delta > 0 ? '↑ +' : ($delta < 0 ? '↓ ' : '– ') }}{{ number_format($delta) }} vs kemarin
-                    </div>
-
-                </div>
-
-            </div>
-
-        </div>
-
-        {{-- TABEL - PERBANDINGAN PENCAPAIAN --}}
-        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden mt-6">
-            {{-- Header tabel --}}
-            <div class="px-5 py-4 border-b border-slate-100">
-                <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                    Perbandingan Pencapaian
-                </h3>
-                <p class="mt-1 text-xs text-slate-900">
-                    Perbandingan pencapaian BKU, UTP Pertanian, dan Usaha Keluarga dengan muatan Wilker Stat dan ST 2023.
-                </p>
-            </div>
-
-            {{-- SUMMARY CARDS --}}
-            <div class="px-5 py-4 bg-slate-50 grid grid-cols-3 gap-3">
-                @php
-                    $tanggalTerbaru = end($tanggalUploads);
-                    $tanggalTerbaruKey = \Carbon\Carbon::parse($tanggalTerbaru)->format('Y-m-d');
-                    $totalTerbaru = $progressGrandTotals[$tanggalTerbaruKey]['bku'] ?? 0;
-                    $totalUsahaKeluarga = $progressGrandTotals[$tanggalTerbaruKey]['usaha_keluarga'] ?? 0;
-                    $persenWilker = $totalWilkerStat > 0 ? round(($totalTerbaru / $totalWilkerStat) * 100, 1) : 0;
-                    $persenUTPPertanian = $totalST2023 > 0 ? round(($totalUTPPertanian / $totalST2023) * 100, 1) : 0;
-                    $persenUsahaKeluarga = $totalST2023 > 0 ? round(($totalUsahaKeluarga / $totalST2023) * 100, 1) : 0;
-                @endphp
-
-                <div class="bg-white rounded-lg border border-slate-200 p-3">
-                    <p class="text-xs text-slate-600 font-semibold">BKU Ditemukan</p>
-                    <p class="text-xl font-bold text-slate-900 mt-1">{{ number_format($totalTerbaru) }}</p>
-                    <p class="text-xs text-slate-500 mt-1">Tanggal: {{ \Carbon\Carbon::parse($tanggalTerbaru)->translatedFormat('d F Y') }}</p>
-                </div>
-
-                <div class="bg-white rounded-lg border border-slate-200 p-3">
-                    <p class="text-xs text-slate-600 font-semibold">BKU vs Muatan Wilkerstat</p>
-                    <p class="text-xl font-bold {{ $persenWilker >= 100 ? 'text-green-600' : 'text-amber-600' }} mt-1">{{ $persenWilker }}%</p>
-                    <div class="w-full bg-slate-200 rounded-full h-1.5 mt-2">
-                        <div class="h-1.5 rounded-full {{ $persenWilker >= 100 ? 'bg-green-500' : 'bg-amber-500' }}" style="width: min({{ $persenWilker }}%, 100%)"></div>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-lg border border-slate-200 p-3">
-                    <p class="text-xs text-slate-600 font-semibold">UTP Pertanian vs ST 2023</p>
-                    <p class="text-xl font-bold {{ $persenUTPPertanian >= 100 ? 'text-green-600' : 'text-purple-600' }} mt-1">{{ $persenUTPPertanian }}%</p>
-                    <div class="w-full bg-slate-200 rounded-full h-1.5 mt-2">
-                        <div class="h-1.5 rounded-full {{ $persenUTPPertanian >= 100 ? 'bg-green-500' : 'bg-purple-500' }}" style="width: min({{ $persenUTPPertanian }}%, 100%)"></div>
-                    </div>
-                </div>
-
-                {{-- <div class="bg-white rounded-lg border border-slate-200 p-3">
-                    <p class="text-xs text-slate-600 font-semibold">Usaha Keluarga vs ST 2023</p>
-                    <p class="text-xl font-bold {{ $persenUsahaKeluarga >= 100 ? 'text-green-600' : 'text-blue-600' }} mt-1">{{ $persenUsahaKeluarga }}%</p>
-                    <div class="w-full bg-slate-200 rounded-full h-1.5 mt-2">
-                        <div class="h-1.5 rounded-full {{ $persenUsahaKeluarga >= 100 ? 'bg-green-500' : 'bg-blue-500' }}" style="width: min({{ $persenUsahaKeluarga }}%, 100%)"></div>
-                    </div>
-                </div> --}}
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead class="bg-slate-50 border-t border-slate-200">
-                        <tr>
-                            <th class="sticky left-0 z-10 px-5 py-4 text-left text-[11px] uppercase tracking-wider text-slate-900 whitespace-nowrap border-r border-slate-200 bg-slate-50">
-                                Kecamatan
-                            </th>
-                            <th class="px-5 py-4 text-center text-[11px] uppercase tracking-wider text-slate-900 whitespace-nowrap">
-                                Ditemukan dan Baru (BKU)
-                            </th>
-                            <th class="px-5 py-4 text-center text-[11px] uppercase tracking-wider text-slate-900 whitespace-nowrap">
-                                Muatan Wilkerstat
-                            </th>
-                            <th class="px-5 py-4 text-center text-[11px] uppercase tracking-wider text-slate-900 whitespace-nowrap">
-                                UTP Pertanian
-                            </th>
-                            <th class="px-5 py-4 text-center text-[11px] uppercase tracking-wider text-slate-900 whitespace-nowrap">
-                                ST 2023
-                            </th>
-                            <th class="px-5 py-4 text-center text-[11px] uppercase tracking-wider text-slate-900 whitespace-nowrap">
-                                Usaha Keluarga
-                            </th>
-                        </tr>
-                    </thead>
-
-                    <tbody class="divide-y divide-slate-100" x-data="{ open: {}, openDesa: {} }">
-                        @php $tanggalTerbaruKey = \Carbon\Carbon::parse(end($tanggalUploads))->format('Y-m-d'); @endphp
-
-                        @forelse ($comparisonTable as $kecamatan => $group)
-                            @php
-                                $kecKey = \Illuminate\Support\Str::slug($kecamatan);
-                                $bkuTerbaru = $group['tree']['bku_progress'];
-                                $usahaKeluargaTerbaru = $group['tree']['usaha_keluarga_progress'];
-                                $wilkerStat = $group['tree']['bku'];
-                                $st2023 = $group['tree']['st_2023'];
-                                $utpTotal = $group['tree']['utp'];
-                                $persenBKU = $wilkerStat > 0 ? round($bkuTerbaru / $wilkerStat * 100, 1) : 0;
-                                $persenUTP = $st2023 > 0 ? round($utpTotal / $st2023 * 100, 1) : 0;
-                            @endphp
-
-                            {{-- ROW KECAMATAN --}}
-                            <tr class="cursor-pointer hover:bg-slate-50" @click="open['{{ $kecKey }}'] = !open['{{ $kecKey }}']">
-                                <td class="sticky left-0 z-10 px-5 py-4 font-semibold text-slate-700 whitespace-nowrap border-r border-slate-200 bg-white">
-                                    <span x-text="open['{{ $kecKey }}'] ? '▾' : '▸'"></span> {{ $kecamatan }}
-                                </td>
-                                <td class="px-5 py-4 text-center font-bold text-slate-900">{{ number_format($bkuTerbaru) }}</td>
-                                <td class="px-5 py-4 text-center">
-                                    <span class="font-semibold text-slate-600">{{ number_format($wilkerStat) }}</span>
-                                    <div class="mt-2 w-32 mx-auto bg-slate-200 rounded-full h-1.5">
-                                        <div class="bg-amber-500 h-1.5 rounded-full" style="width: min({{ $persenBKU }}%, 100%)"></div>
-                                    </div>
-                                    <p class="text-xs text-slate-500 mt-1">
-                                        {{ $wilkerStat > 0 ? $persenBKU.'%' : 'N/A' }}
-                                    </p>
-                                </td>
-                                <td class="px-5 py-4 text-center font-bold text-slate-900">{{ number_format($utpTotal) }}</td>
-                                <td class="px-5 py-4 text-center">
-                                    <span class="font-semibold text-slate-600">{{ number_format($st2023) }}</span>
-                                    <div class="mt-2 w-32 mx-auto bg-slate-200 rounded-full h-1.5">
-                                        <div class="bg-purple-500 h-1.5 rounded-full" style="width: min({{ $persenUTP }}%, 100%)"></div>
-                                    </div>
-                                    <p class="text-xs text-slate-500 mt-1">
-                                        {{ $st2023 > 0 ? $persenUTP.'%' : 'N/A' }}
-                                    </p>
-                                </td>
-                                <td class="px-5 py-4 text-center font-bold text-slate-900">{{ number_format($usahaKeluargaTerbaru) }}</td>
-                            </tr>
-
-                           {{-- ROW DESA --}}
-                            @foreach (($group['tree']['desa'] ?? []) as $namaDesa => $desaGroup)
-                                {{-- @continue(empty(trim($namaDesa ?? ''))) --}}
-
-                                @php
-                                    $desaKey = $kecKey . '-' . \Illuminate\Support\Str::slug($namaDesa);
-                                    $persenBKUDesa = $desaGroup['bku'] > 0 ? round($desaGroup['bku_progress'] / $desaGroup['bku'] * 100, 1) : 0;
-                                    $persenUTPDesa = $desaGroup['st_2023'] > 0 ? round($desaGroup['utp'] / $desaGroup['st_2023'] * 100, 1) : 0;
-                                @endphp
-
-                                <template x-if="open['{{ $kecKey }}']">
-                                    <tr class="cursor-pointer hover:bg-slate-100"
-                                        @click="openDesa['{{ $desaKey }}'] = !openDesa['{{ $desaKey }}']">
-                                        <td class="sticky left-0 z-10 px-5 py-3 pl-10 text-slate-600 whitespace-nowrap">
-                                            <span x-text="openDesa['{{ $desaKey }}'] ? '▾' : '▸'" class="font-bold text-slate-700"></span> {{ $namaDesa }}
-                                        </td>
-                                        <td class="px-5 py-3 text-center font-semibold">{{ number_format($desaGroup['bku_progress']) }}</td>
-                                        <td class="px-5 py-3 text-center">
-                                            <span class="font-semibold">{{ number_format($desaGroup['bku']) }}</span>
-                                            <div class="mt-2 w-28 mx-auto bg-slate-200 rounded-full h-1.5">
-                                                <div class="bg-amber-500 h-1.5 rounded-full" style="width: min({{ $persenBKUDesa }}%, 100%)"></div>
-                                            </div>
-                                            <p class="text-xs text-slate-500 mt-1">{{ $persenBKUDesa }}%</p>
-                                        </td>
-                                        <td class="px-5 py-3 text-center font-semibold">{{ number_format($desaGroup['utp']) }}</td>
-                                        <td class="px-5 py-3 text-center">
-                                            <span class="font-semibold">{{ number_format($desaGroup['st_2023']) }}</span>
-                                            <div class="mt-2 w-28 mx-auto bg-slate-200 rounded-full h-1.5">
-                                                <div class="bg-purple-500 h-1.5 rounded-full" style="width: min({{ $persenUTPDesa }}%, 100%)"></div>
-                                            </div>
-                                            <p class="text-xs text-slate-500 mt-1">{{ $persenUTPDesa }}%</p>
-                                        </td>
-                                        <td class="px-5 py-3 text-center font-semibold">{{ number_format($desaGroup['usaha_keluarga_progress']) }}</td>
-                                    </tr>
-                                </template>
-
-                                {{-- ROW SLS --}}
-                                @foreach ($desaGroup['sls'] as $slsRow)
-                                    @php
-                                        $namaSls = trim($slsRow['sls'] ?? '') !== '' ? $slsRow['sls'] : 'Tanpa SLS';
-                                        $persenBKUSls = $slsRow['bku_wilkerstat'] > 0 ? round($slsRow['bku_progress'] / $slsRow['bku_wilkerstat'] * 100, 1) : 0;
-                                        $persenUTPSls = $slsRow['st_2023'] > 0 ? round($slsRow['total_usaha'] / $slsRow['st_2023'] * 100, 1) : 0;
-                                    @endphp
-
-                                    <template x-if="open['{{ $kecKey }}'] && openDesa['{{ $desaKey }}']">
-                                        <tr class="hover:bg-slate-50">
-                                            <td class="sticky left-0 z-10 px-5 py-2 pl-16 text-slate-500 bg-white whitespace-nowrap">
-                                                {{ $namaSls }}
-                                            </td>
-                                            <td class="px-5 py-2 text-center">{{ number_format($slsRow['bku_progress']) }}</td>
-                                            <td class="px-5 py-2 text-center">
-                                                <span>{{ number_format($slsRow['bku_wilkerstat']) }}</span>
-                                                <div class="mt-1.5 w-24 mx-auto bg-slate-200 rounded-full h-1">
-                                                    <div class="bg-amber-500 h-1 rounded-full" style="width: min({{ $persenBKUSls }}%, 100%)"></div>
-                                                </div>
-                                                <p class="text-[11px] text-slate-400 mt-0.5">{{ $persenBKUSls }}%</p>
-                                            </td>
-                                            <td class="px-5 py-2 text-center">{{ number_format($slsRow['total_usaha']) }}</td>
-                                            <td class="px-5 py-2 text-center">
-                                                <span>{{ number_format($slsRow['st_2023']) }}</span>
-                                                <div class="mt-1.5 w-24 mx-auto bg-slate-200 rounded-full h-1">
-                                                    <div class="bg-purple-500 h-1 rounded-full" style="width: min({{ $persenUTPSls }}%, 100%)"></div>
-                                                </div>
-                                                <p class="text-[11px] text-slate-400 mt-0.5">{{ $persenUTPSls }}%</p>
-                                            </td>
-                                            <td class="px-5 py-2 text-center">{{ number_format($slsRow['usaha_keluarga_progress']) }}</td>
-                                        </tr>
-                                    </template>
-                                @endforeach
-                            @endforeach
-                        @empty
-                            <tr><td colspan="6" class="px-5 py-10 text-center text-slate-400">Belum ada data perbandingan.</td></tr>
-                        @endforelse
-                    </tbody>
-
-                    <tfoot>
-                        <tr class="bg-gradient-to-r from-slate-100 to-slate-50 border-t-2 border-slate-300">
-                            @php
-                                $totalBKU = $progressGrandTotals[$tanggalTerbaruKey]['bku'] ?? 0;
-                                $totalUsahaKeluarga = $progressGrandTotals[$tanggalTerbaruKey]['usaha_keluarga'] ?? 0;
-                                $totalPersenBKU = $totalWilkerStat > 0 ? round(($totalBKU / $totalWilkerStat) * 100, 1) : 0;
-                                $totalPersenUTP = $totalST2023 > 0 ? round(($totalUTPPertanian / $totalST2023) * 100, 1) : 0;
-                            @endphp
-                            
-                            <td class="sticky left-0 z-10 bg-slate-100 px-5 py-4 font-bold text-slate-900 whitespace-nowrap border-r border-slate-200">
-                                TOTAL
-                            </td>
-                            <td class="px-5 py-4 text-center font-bold text-slate-900">
-                                {{ number_format($totalBKU) }}
-                            </td>
-                            <td class="px-5 py-4 text-center">
-                                <span class="font-semibold text-slate-600">{{ number_format($totalWilkerStat) }}</span>
-                                <div class="mt-2 w-32 mx-auto bg-slate-200 rounded-full h-1.5">
-                                    <div class="bg-amber-500 h-1.5 rounded-full" style="width: min({{ $totalPersenBKU }}%, 100%)"></div>
-                                </div>
-                                <p class="text-xs text-slate-500 mt-1 font-bold">{{ $totalPersenBKU }}%</p>
-                            </td>
-                            <td class="px-5 py-4 text-center font-bold text-slate-900">
-                                {{ number_format($totalUTPPertanian) }}
-                            </td>
-                            <td class="px-5 py-4 text-center">
-                                <span class="font-semibold text-slate-600">{{ number_format($totalST2023) }}</span>
-                                <div class="mt-2 w-32 mx-auto bg-slate-200 rounded-full h-1.5">
-                                    <div class="bg-purple-500 h-1.5 rounded-full" style="width: min({{ $totalPersenUTP }}%, 100%)"></div>
-                                </div>
-                                <p class="text-xs text-slate-500 mt-1 font-bold">{{ $totalPersenUTP }}%</p>
-                            </td>
-                            <td class="px-5 py-4 text-center font-bold text-slate-900">
-                                {{ number_format($totalUsahaKeluarga) }}
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
-
-        {{-- TABEL 1 - PERKEMBANGAN DATA BERDASARKAN TANGGAL --}}
-
-        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-            {{-- Header tabel --}}
-            <div class="px-5 py-4 border-b border-slate-100">
-                <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                    Perkembangan Data Usaha
-                </h3>
-                <p class="mt-1 text-xs text-slate-900">
-                    Perbandingan jumlah BKU, Usaha Keluarga, dan Keluarga berdasarkan tanggal upload.
-                    Klik baris kecamatan untuk melihat rincian per petugas.
-                </p>
-            </div>
-
-            <div class="overflow-x-auto">
-
-                <table class="w-full text-sm">
-
-                    <thead class="bg-white border-b border-slate-200">
-                        <tr>
-                            <th rowspan="2"
-                                class="sticky left-0 z-10 px-5 py-4 text-left
-                                text-[11px] uppercase tracking-wider text-slate-900
-                                whitespace-nowrap border-r border-slate-200 align-bottom
-                                bg-white">
-                                Kecamatan / Petugas
-                            </th>
-
-                            @foreach ($tanggalUploads as $tanggal)
-                                <th colspan="3"
-                                    class="px-6 py-3 text-center text-[11px]
-                            uppercase tracking-wider text-slate-900
-                            whitespace-nowrap border-l-2 border-slate-200">
-
-                                    {{ \Carbon\Carbon::parse($tanggal)->translatedFormat('d F Y') }}
-
-                                </th>
-                            @endforeach
-
-                        </tr>
-
-                        <tr>
-
-                            @foreach ($tanggalUploads as $tanggal)
-                                <th
-                                    class="px-3 py-2 text-center text-[12px]
-                            font-semibold uppercase tracking-wider
-                            text-slate-900 border-l-2 border-slate-200
-                            whitespace-nowrap">
-                                    BKU Ditemukan dan Baru
-                                </th>
-
-                                <th
-                                    class="px-3 py-2 text-center text-[12px]
-                            font-semibold uppercase tracking-wider
-                            text-slate-900 whitespace-nowrap">
-                                    Usaha dalam Keluarga<br> Ditemukan dan Baru
-                                </th>
-
-                                <th
-                                    class="px-3 py-2 text-center text-[12px]
-                            font-semibold uppercase tracking-wider
-                            text-slate-900 whitespace-nowrap">
-                                    Keluarga Ditemukan dan Baru
-                                </th>
-                            @endforeach
-
-                        </tr>
-
-                    </thead>
-                    {{--  BODY --}}
-                    @forelse ($progressTable as $kecamatan => $group)
-
-                        <tbody x-data="{ open: false }" class="divide-y divide-slate-100">
-
-                            {{-- BARIS KECAMATAN --}}
-
-                            <tr @click="open = !open" class="hover:bg-slate-50 cursor-pointer transition-colors">
-                                {{-- NAMA KECAMATAN --}}
-                                <td
-                                    class="sticky left-0 z-10 bg-white px-5 py-4
-                            font-semibold text-slate-700 whitespace-nowrap
-                            border-r border-slate-200">
-
-                                    <span x-text="open ? '▾' : '▸'" class="mr-2 text-slate-900">
-                                    </span>
-
-                                    {{ $kecamatan }}
-
-                                </td>
-                                {{-- DATA KECAMATAN PER TANGGAL --}}
-                                @foreach ($tanggalUploads as $tanggal)
-                                    @php
-
-                                        $tanggalKey = \Carbon\Carbon::parse($tanggal)->format('Y-m-d');
-
-                                        $item = $group['totals'][$tanggalKey] ?? null;
-
-                                    @endphp
-
-                                    {{-- BKU --}}
-
-                                    <td
-                                        class="px-3 py-4 text-center whitespace-nowrap
-                                border-l border-slate-100">
-                                        @if ($item)
-                                            {{-- NILAI --}}
-                                            <div class="font-semibold text-slate-900">
-
-                                                {{ number_format($item['bku']) }}
-
-                                            </div>
-
-                                            {{-- PERSENTASE --}}
-                                            @php
-
-                                                $persen = $item['percentage']['bku'] ?? null;
-
-                                                $trend = $item['trend']['bku'] ?? 'none';
-
-                                            @endphp
-
-
-                                            @if ($persen !== null)
-                                                <div
-                                                    class="mt-1 text-[11px] font-semibold
-                                            {{ $trend === 'up' ? 'text-green-600' : ($trend === 'down' ? 'text-red-600' : 'text-slate-400') }}">
-
-                                                    @if ($trend === 'up')
-                                                        ↑
-                                                    @elseif ($trend === 'down')
-                                                        ↓
-                                                    @else
-                                                        →
-                                                    @endif
-
-                                                    {{ number_format(abs($persen), 1) }}%
-
-                                                </div>
-                                            @endif
-                                        @else
-                                            -
-                                        @endif
-
-                                    </td>
-
-                                    {{-- USAHA KELUARGA --}}
-
-                                    <td class="px-3 py-4 text-center whitespace-nowrap">
-
-                                        @if ($item)
-                                            {{-- NILAI --}}
-                                            <div class="text-slate-900 font-semibold">
-
-                                                {{ number_format($item['usaha_keluarga']) }}
-
-                                            </div>
-
-
-                                            {{-- PERSENTASE --}}
-                                            @php
-
-                                                $persen = $item['percentage']['usaha_keluarga'] ?? null;
-
-                                                $trend = $item['trend']['usaha_keluarga'] ?? 'none';
-
-                                            @endphp
-
-
-                                            @if ($persen !== null)
-                                                <div
-                                                    class="mt-1 text-[11px] font-semibold
-                                            {{ $trend === 'up' ? 'text-green-600' : ($trend === 'down' ? 'text-red-600' : 'text-slate-400') }}">
-
-                                                    @if ($trend === 'up')
-                                                        ↑
-                                                    @elseif ($trend === 'down')
-                                                        ↓
-                                                    @else
-                                                        →
-                                                    @endif
-
-                                                    {{ number_format(abs($persen), 1) }}%
-
-                                                </div>
-                                            @endif
-                                        @else
-                                            -
-                                        @endif
-
-                                    </td>
-
-                                    {{-- KELUARGA --}}
-
-                                    <td class="px-3 py-4 text-center whitespace-nowrap">
-
-                                        @if ($item)
-                                            <div class="text-slate-900 font-semibold">
-                                                {{ number_format($item['keluarga']) }}
-                                            </div>
-
-                                            @php
-                                                $persen = $item['percentage']['keluarga'] ?? null;
-                                                $trend = $item['trend']['keluarga'] ?? 'none';
-                                            @endphp
-
-                                            @if ($persen !== null)
-                                                <div
-                                                    class="mt-1 text-[11px] font-semibold
-                {{ $trend === 'up' ? 'text-green-600' : ($trend === 'down' ? 'text-red-600' : 'text-slate-400') }}">
-
-                                                    @if ($trend === 'up')
-                                                        ↑
-                                                    @elseif ($trend === 'down')
-                                                        ↓
-                                                    @else
-                                                        →
-                                                    @endif
-
-                                                    {{ number_format(abs($persen), 1) }}%
-
-                                                </div>
-                                            @elseif ($item['keluarga'] > 0)
-                                                <div class="mt-1 text-[11px] font-semibold text-green-600">
-                                                    ↑ Baru
-                                                </div>
-                                                {{-- @else
-                                                <div class="mt-1 text-[12px] font-semibold text-slate-400">
-                                                    → 0%
-                                                </div> --}}
-                                            @endif
-                                        @else
-                                            -
-                                        @endif
-
-                                    </td>
-                                @endforeach
-
-                            </tr>
-
-                            {{-- BARIS PETUGAS --}}
-
-                            @foreach ($group['petugas'] as $namaPetugas => $tanggalData)
-                                <tr x-show="open" x-cloak class="bg-slate-50/60">
-
-                                    {{-- NAMA PETUGAS --}}
-
-                                    <td
-                                        class="sticky left-0 z-10 bg-slate-50
-                                pl-10 pr-5 py-3 text-slate-900
-                                whitespace-nowrap border-r border-slate-200">
-
-                                        {{ $namaPetugas }}
-
-                                    </td>
-
-                                    {{-- DATA PETUGAS PER TANGGAL --}}
-
-                                    @foreach ($tanggalUploads as $tanggal)
-                                        @php
-
-                                            $tanggalKey = \Carbon\Carbon::parse($tanggal)->format('Y-m-d');
-
-                                            $item = $tanggalData[$tanggalKey] ?? null;
-
-                                        @endphp
-
-                                        {{-- BKU PETUGAS --}}
-
-                                        <td
-                                            class="px-3 py-3 text-center whitespace-nowrap
-                                    border-l border-slate-200">
-
-                                            @if ($item)
-                                                {{-- NILAI --}}
-                                                <div class="text-sm font-semibold text-slate-700">
-
-                                                    {{ number_format($item['bku']) }}
-
-                                                </div>
-
-                                                {{-- PERSENTASE --}}
-                                                @php
-
-                                                    $persen = $item['percentage']['bku'] ?? null;
-
-                                                    $trend = $item['trend']['bku'] ?? 'none';
-
-                                                @endphp
-
-                                                @if ($persen !== null)
-                                                    <div
-                                                        class="mt-1 text-[11px] font-semibold
-                                                {{ $trend === 'up' ? 'text-green-600' : ($trend === 'down' ? 'text-red-600' : 'text-slate-900') }}">
-
-                                                        @if ($trend === 'up')
-                                                            ↑
-                                                        @elseif ($trend === 'down')
-                                                            ↓
-                                                        @else
-                                                            →
-                                                        @endif
-
-                                                        {{ number_format(abs($persen), 1) }}%
-
-                                                    </div>
-                                                @endif
-                                            @else
-                                                -
-                                            @endif
-
-                                        </td>
-
-                                        {{-- USAHA KELUARGA PETUGAS --}}
-
-                                        <td class="px-3 py-3 text-center whitespace-nowrap">
-
-                                            @if ($item)
-                                                {{-- NILAI --}}
-                                                <div class="text-sm text-slate-900">
-
-                                                    {{ number_format($item['usaha_keluarga']) }}
-
-                                                </div>
-
-                                                {{-- PERSENTASE --}}
-                                                @php
-
-                                                    $persen = $item['percentage']['usaha_keluarga'] ?? null;
-
-                                                    $trend = $item['trend']['usaha_keluarga'] ?? 'none';
-
-                                                @endphp
-
-                                                @if ($persen !== null)
-                                                    <div
-                                                        class="mt-1 text-[11px] font-semibold
-                                                {{ $trend === 'up' ? 'text-green-600' : ($trend === 'down' ? 'text-red-600' : 'text-slate-900') }}">
-
-                                                        @if ($trend === 'up')
-                                                            ↑
-                                                        @elseif ($trend === 'down')
-                                                            ↓
-                                                        @else
-                                                            →
-                                                        @endif
-
-                                                        {{ number_format(abs($persen), 1) }}%
-
-                                                    </div>
-                                                @endif
-                                            @else
-                                                -
-                                            @endif
-
-                                        </td>
-
-                                        {{-- KELUARGA PETUGAS --}}
-
-                                        <td class="px-3 py-3 text-center whitespace-nowrap">
-
-                                            @if ($item)
-                                                {{-- NILAI --}}
-                                                <div class="text-sm text-slate-900">
-
-                                                    {{ number_format($item['keluarga']) }}
-
-                                                </div>
-
-                                                {{-- PERSENTASE --}}
-                                                @php
-
-                                                    $persen = $item['percentage']['keluarga'] ?? null;
-
-                                                    $trend = $item['trend']['keluarga'] ?? 'none';
-
-                                                @endphp
-
-                                                @if ($persen !== null)
-                                                    <div
-                                                        class="mt-1 text-[11px] font-semibold
-                                                {{ $trend === 'up' ? 'text-green-600' : ($trend === 'down' ? 'text-red-600' : 'text-slate-900') }}">
-
-                                                        @if ($trend === 'up')
-                                                            ↑
-                                                        @elseif ($trend === 'down')
-                                                            ↓
-                                                        @else
-                                                            →
-                                                        @endif
-
-                                                        {{ number_format(abs($persen), 1) }}%
-
-                                                    </div>
-                                                @endif
-                                            @else
-                                                -
-                                            @endif
-
-                                        </td>
-                                    @endforeach
-
-                                </tr>
-                            @endforeach
-
-                        </tbody>
-
-
-                    @empty
-
-                        {{--  DATA KOSONG --}}
-
-                        <tbody>
-
-                            <tr>
-
-                                <td colspan="{{ count($tanggalUploads) * 3 + 1 }}"
-                                    class="px-5 py-10 text-center text-slate-400">
-
-                                    Belum ada data perkembangan Usaha.
-
-                                </td>
-
-                            </tr>
-
-                        </tbody>
-                    @endforelse
-                    <tfoot>
-                        <tr class="bg-slate-100 border-t-2 border-slate-300">
-
-                            <td
-                                class="sticky left-0 z-10 bg-slate-100 px-5 py-4 font-bold text-slate-900 whitespace-nowrap border-r border-slate-200">
-                                TOTAL SEMUA KECAMATAN
-                            </td>
-
-                            @foreach ($tanggalUploads as $tanggal)
-                                @php
-                                    $tanggalKey = \Carbon\Carbon::parse($tanggal)->format('Y-m-d');
-                                    $total = $progressGrandTotals[$tanggalKey] ?? [
-                                        'bku' => 0,
-                                        'usaha_keluarga' => 0,
-                                        'keluarga' => 0,
-                                    ];
-                                @endphp
-
-                                <td class="px-3 py-4 text-center whitespace-nowrap border-l border-slate-200">
-                                    <div class="font-bold text-slate-900">
-                                        {{ number_format($total['bku']) }}
-                                    </div>
-                                </td>
-
-                                <td class="px-3 py-4 text-center whitespace-nowrap">
-                                    <div class="font-bold text-slate-900">
-                                        {{ number_format($total['usaha_keluarga']) }}
-                                    </div>
-                                </td>
-
-                                <td class="px-3 py-4 text-center whitespace-nowrap">
-                                    <div class="font-bold text-slate-900">
-                                        {{ number_format($total['keluarga']) }}
-                                    </div>
-                                </td>
-                            @endforeach
-
-                        </tr>
-                    </tfoot>
-                </table>
-
-            </div>
-
-        </div>
-        
-        {{-- ================= FILTER & EXPORT DATA USAHA (GABUNGAN) ================= --}}
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-
-            <div class="p-6">
-
-                <div class="mb-5 flex items-center justify-between">
-                    <div>
-                        <h3 class="text-lg font-semibold text-slate-800">
-                            Filter & Export Data Usaha
-                        </h3>
-                        <p class="text-sm text-slate-500 mt-1">
-                            Atur filter data dan kolom yang ditampilkan, lalu terapkan sekaligus.
-                        </p>
-                    </div>
-
-                    @if(request()->anyFilled(['nama_kecamatan', 'kd_kab', 'ppl', 'pml']))
-                        <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-sky-100 text-sky-700">
-                            Filter Aktif
-                        </span>
-                    @endif
-                </div>
-
-                <form method="GET" action="{{ route('usaha') }}" x-data
-                    @submit="$store.usahaColumns.applyDraft()">
-                    <input type="hidden" name="columns" id="exportColumns">
-
-                    {{-- ===== BAGIAN 1: FILTER DATA ===== --}}
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {{-- <div>
-                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                                Tanggal Upload
-                            </label>
-                            <select name="tanggal"
-                                class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700">
-                               
-                            </select>
-                        </div> --}}
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                                Kecamatan
-                            </label>
-                            <select name="nama_kecamatan"
-                                class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700">
-                                <option value="">Semua Kecamatan</option>
-                                @foreach ($kecamatanOptions as $kec)
-                                    <option value="{{ $kec }}" {{ request('nama_kecamatan') == $kec ? 'selected' : '' }}>
-                                        {{ $kec }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                                Kode Kabupaten
-                            </label>
-                            <select name="kd_kab"
-                                class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700">
-                                <option value="">Semua Kabupaten</option>
-                                @foreach ($kabupatenOptions as $kab)
-                                    <option value="{{ $kab }}" {{ request('kd_kab') == $kab ? 'selected' : '' }}>
-                                        {{ $kab }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                                PPL
-                            </label>
-                            <select name="ppl"
-                                class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700">
-                                <option value="">Semua PPL</option>
-                                @foreach ($pplOptions as $ppl)
-                                    <option value="{{ $ppl->petugas_username }}"
-                                        {{ request('ppl') == $ppl->petugas_username ? 'selected' : '' }}>
-                                        {{ $ppl->nama_petugas }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                                PML
-                            </label>
-                            <select name="pml"
-                                class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700">
-                                <option value="">Semua PML</option>
-                                @foreach ($pmlOptions as $pml)
-                                    <option value="{{ $pml }}" {{ request('pml') == $pml ? 'selected' : '' }}>
-                                        {{ $pml }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-
-                    </div>
-
-                    {{-- ===== BAGIAN 2: FILTER KOLOM (collapsible di dalam form yang sama) ===== --}}
-                    <div x-data="{ showColumns: false }" class="mt-5 pt-4 border-t border-slate-100">
-
-                    <button type="button" @click="showColumns = !showColumns; if (showColumns) $store.usahaColumns.initDraft()" class="w-full flex items-center justify-between text-left">
-
-                        <div class="flex items-center gap-2">
-                            <div>
-                                <div class="flex items-center gap-2">
-                                    <span class="text-sm font-semibold text-slate-700">Kolom Tabel</span>
-                                    <span x-show="$store.usahaColumns.visibleCount() < $store.usahaColumns.keys().length" x-cloak
-                                        class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">
-                                        <span x-text="$store.usahaColumns.visibleCount()"></span> / <span x-text="$store.usahaColumns.keys().length"></span> aktif
-                                    </span>
-                                </div>
-
-                                <p class="text-xs text-slate-400 mt-0.5">
-                                    Kolom yang ditampilkan di tabel —
-                                    <span x-text="$store.usahaColumns.visibleCount()"></span> dari
-                                    <span x-text="$store.usahaColumns.keys().length"></span> kolom aktif
-                                </p>
-                            </div>
-                        </div>
-
-                        <span x-text="showColumns ? '▾' : '▸'" class="text-slate-400 text-lg"></span>
-                    </button>
-                    
-                        <div x-show="showColumns" x-cloak class="pt-4">
-
-                            <div class="flex gap-2 mb-4">
-                                <button type="button" @click="$store.usahaColumns.draftShowAll()"
-                                    class="text-xs font-medium px-3 py-1.5 rounded-lg bg-sky-50 text-sky-600 hover:bg-sky-100 transition">
-                                    Tampilkan Semua
-                                </button>
-                                <button type="button" @click="$store.usahaColumns.draftHideAll()"
-                                    class="text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
-                                    Sembunyikan Semua
-                                </button>
-                            </div>
-
-                            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-2 text-sm text-slate-600">
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.id_wilayah"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    ID Wilayah
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.kd_kab"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Kode Kabupaten
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.nama_sls"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Nama SLS
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.ub_prelist"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    UB Prelist Awal
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.um_prelist"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    UM Prelist Awal
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.umk_prelist"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    UMK Prelist Awal
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ditemukan_bku"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Usaha Ditemukan (BKU)
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ditutup_bku"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Usaha Ditutup (BKU)
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ganda_bku"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Usaha Ganda (BKU)
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_tidak_ditemukan_bku"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Usaha Tidak Ditemukan (BKU)
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_baru_bku"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Usaha Baru (BKU)
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ditemukan_keluarga"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Usaha Ditemukan (Keluarga)
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_tutup_keluarga"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Usaha Tutup (Keluarga)
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_ganda_keluarga"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Usaha Ganda (Keluarga)
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_tidak_ditemukan_keluarga"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Usaha Tidak Ditemukan (Keluarga)
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_baru_keluarga"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Usaha Baru (Keluarga)
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_ditemukan"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Keluarga Ditemukan
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_meninggal"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Keluarga Meninggal
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_tidak_eligible"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Keluarga Tidak Eligible
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_tidak_ditemui"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Keluarga Tidak Dapat Ditemui
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_tidak_ditemukan"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Keluarga Tidak Ditemukan
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_baru"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Keluarga Baru
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.prelist_usaha"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Jumlah Prelist Usaha
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.usaha_realisasi"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Jumlah Usaha Realisasi
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.prelist_keluarga"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Jumlah Prelist Keluarga
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.keluarga_realisasi"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Jumlah Keluarga Realisasi
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.ppl"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    PPL
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.pml"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    PML
-                                </label>
-
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" x-model="$store.usahaColumns.draft.last_update"
-                                        class="rounded border-slate-300 text-sky-600">
-                                    Last Update
-                                </label>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                    {{-- ===== SATU TOMBOL UNTUK KEDUANYA ===== --}}
-                    <div class="flex items-center justify-between mt-5 pt-4 border-t border-slate-100">
-
-                        <div>
-                            @if(request()->anyFilled(['nama_kecamatan', 'kd_kab', 'ppl', 'pml']))
-                                <a href="{{ route('usaha') }}"
-                                    class="text-sm font-semibold text-slate-500 hover:text-slate-700 transition">
-                                    Reset Semua Filter
-                                </a>
-                            @endif
-                        </div>
-
-                        <div class="flex gap-3">
-                            <button type="submit"
-                                onclick="Alpine.store('usahaColumns').applyDraft(); document.getElementById('exportColumns').value = JSON.stringify(Alpine.store('usahaColumns').visibleColumns())"
-                                class="bg-sky-600 hover:bg-sky-700 text-white rounded-xl px-6 h-11 text-sm font-semibold shadow-sm hover:shadow transition">
-                                Terapkan Filter
-                            </button>
-
-                            <button type="submit"
-                                formaction="{{ route('export.usaha.grouped') }}"
-                                onclick="document.getElementById('exportColumns').value = JSON.stringify($store.usahaColumns.visibleColumns())"
-                                class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6 h-11 text-sm font-semibold shadow-sm hover:shadow transition">
-                                Export ke Excel
-                            </button>
-                        </div>
-
-                    </div>
-
-                </form>
-
-            </div>
-
-        </div>
-
-        {{-- TABEL USAHA --}}
-
-        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-
-            <div class="px-5 py-4 border-b border-slate-200">
-
-                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wide">
-                    Data Usaha
-                </h3>
-
-            </div>
-
-            <div class="overflow-x-auto">
-
-                <table x-data="{}" class="w-full text-sm">
-
-                    <thead class="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
-
-                        <tr>
-
-                            <th class="text-left px-5 py-4 whitespace-nowrap">#</th>
-
-                            <th x-show="$store.usahaColumns.id_wilayah" x-cloak
-                                class="text-left px-5 py-4 whitespace-nowrap">ID Wilayah</th>
-                            <th x-show="$store.usahaColumns.kd_kab" x-cloak class="text-left px-5 py-4 whitespace-nowrap">
-                                Kode Kabupaten</th>
-                            <th x-show="$store.usahaColumns.desa" x-cloak class="text-left px-5 py-4 whitespace-nowrap">
-                                Desa</th>
-                            <th x-show="$store.usahaColumns.nama_sls" x-cloak
-                                class="text-left px-5 py-4 whitespace-nowrap">Nama SLS</th>
-                            <th x-show="$store.usahaColumns.ub_prelist" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">UB Prelist Awal</th>
-                            <th x-show="$store.usahaColumns.um_prelist" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">UM Prelist Awal</th>
-                            <th x-show="$store.usahaColumns.umk_prelist" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">UMK Prelist Awal</th>
-                            <th x-show="$store.usahaColumns.usaha_ditemukan_bku" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Usaha Ditemukan (BKU)</th>
-                            <th x-show="$store.usahaColumns.usaha_ditutup_bku" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Usaha Ditutup (BKU)</th>
-                            <th x-show="$store.usahaColumns.usaha_ganda_bku" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Usaha Ganda (BKU)</th>
-                            <th x-show="$store.usahaColumns.usaha_tidak_ditemukan_bku" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Usaha Tidak Ditemukan (BKU)</th>
-                            <th x-show="$store.usahaColumns.usaha_baru_bku" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Usaha Baru (BKU)</th>
-                            <th x-show="$store.usahaColumns.usaha_ditemukan_keluarga" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Usaha Ditemukan (Usaha Keluarga)</th>
-                            <th x-show="$store.usahaColumns.usaha_tutup_keluarga" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Usaha Tutup (Usaha Keluarga)</th>
-                            <th x-show="$store.usahaColumns.usaha_ganda_keluarga" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Usaha Ganda (Usaha Keluarga)</th>
-                            <th x-show="$store.usahaColumns.usaha_tidak_ditemukan_keluarga" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Usaha Tidak Ditemukan (Usaha Keluarga)</th>
-                            <th x-show="$store.usahaColumns.usaha_baru_keluarga" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Usaha Baru (Usaha Keluarga)</th>
-                            <th x-show="$store.usahaColumns.keluarga_ditemukan" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Keluarga Ditemukan</th>
-                            <th x-show="$store.usahaColumns.keluarga_meninggal" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Keluarga Meninggal</th>
-                            <th x-show="$store.usahaColumns.keluarga_tidak_eligible" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Keluarga Tidak Eligible</th>
-                            <th x-show="$store.usahaColumns.keluarga_tidak_ditemui" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Keluarga Tidak Dapat Ditemui</th>
-                            <th x-show="$store.usahaColumns.keluarga_tidak_ditemukan" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Keluarga Tidak Ditemukan</th>
-                            <th x-show="$store.usahaColumns.keluarga_baru" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Keluarga Baru</th>
-                            <th x-show="$store.usahaColumns.prelist_usaha" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Jumlah Prelist Usaha</th>
-                            <th x-show="$store.usahaColumns.usaha_realisasi" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Jumlah Usaha Realisasi</th>
-                            <th x-show="$store.usahaColumns.prelist_keluarga" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Jumlah Prelist Keluarga</th>
-                            <th x-show="$store.usahaColumns.keluarga_realisasi" x-cloak
-                                class="text-right px-5 py-4 whitespace-nowrap">Jumlah Keluarga Realisasi</th>
-                            <th x-show="$store.usahaColumns.ppl" x-cloak class="text-left px-5 py-4 whitespace-nowrap">PPL
-                            </th>
-                            <th x-show="$store.usahaColumns.pml" x-cloak class="text-left px-5 py-4 whitespace-nowrap">PML
-                            </th>
-                            <th x-show="$store.usahaColumns.last_update" x-cloak
-                                class="text-left px-5 py-4 whitespace-nowrap">Last Update</th>
-
-                        </tr>
-
-                    </thead>
-
-                    @forelse ($dataGrouped as $kecamatan => $group)
-                    @php
-                        $totals = $group['totals'];
-                        $desaGroups = $group['desa'];
-                    @endphp
-
-                    <tbody x-data="{ open: false, openDesa: {} }" class="divide-y divide-slate-100">
-
-                        {{-- ROW: KECAMATAN --}}
-                        <tr @click="open = !open" class="bg-slate-100 hover:bg-slate-200 cursor-pointer transition-colors">
-                            <td class="px-5 py-3 font-bold text-slate-700 whitespace-nowrap sticky left-0 z-10 bg-slate-100">
-                                <span x-text="open ? '▾' : '▸'" class="mr-2 text-slate-400"></span>
-                                {{ $kecamatan }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.id_wilayah" x-cloak class="px-5 py-3 bg-slate-100"></td>
-                            <td x-show="$store.usahaColumns.kd_kab" x-cloak class="px-5 py-3 bg-slate-100 font-semibold text-slate-600">
-                            </td>
-                            <td x-show="$store.usahaColumns.desa" x-cloak class="px-5 py-3 bg-slate-100"></td>
-                            <td x-show="$store.usahaColumns.nama_sls" x-cloak class="px-5 py-3 font-semibold bg-slate-100"></td>
-
-                            <td x-show="$store.usahaColumns.ub_prelist" x-cloak class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($totals['jumlah_ub_prelist_awal'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.um_prelist" x-cloak class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($totals['jumlah_um_prelist_awal'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.umk_prelist" x-cloak class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($totals['jumlah_umk_prelist_awal'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ditemukan_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-emerald-600 bg-slate-100">
-                                {{ number_format($totals['jumlah_usaha_ditemukan_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ditutup_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-red-600 bg-slate-100">
-                                {{ number_format($totals['jumlah_usaha_ditutup_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ganda_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-amber-600 bg-slate-100">
-                                {{ number_format($totals['jumlah_usaha_ganda_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-slate-600 bg-slate-100">
-                                {{ number_format($totals['jumlah_usaha_tidak_ditemukan_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_baru_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-blue-600 bg-slate-100">
-                                {{ number_format($totals['jumlah_usaha_baru_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ditemukan_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($totals['jumlah_usaha_ditemukan_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_tutup_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($totals['jumlah_usaha_tutup_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ganda_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($totals['jumlah_usaha_ganda_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($totals['jumlah_usaha_tidak_ditemukan_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_baru_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($totals['jumlah_usaha_baru_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_ditemukan" x-cloak
-                                class="px-5 py-3 text-right font-bold text-emerald-600 bg-slate-100">
-                                {{ number_format($totals['jumlah_keluarga_ditemukan'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_meninggal" x-cloak
-                                class="px-5 py-3 text-right font-bold text-red-600 bg-slate-100">
-                                {{ number_format($totals['jumlah_keluarga_meninggal'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_tidak_eligible" x-cloak
-                                class="px-5 py-3 text-right font-bold text-amber-600 bg-slate-100">
-                                {{ number_format($totals['jumlah_keluarga_tidak_eligible'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_tidak_ditemui" x-cloak
-                                class="px-5 py-3 text-right font-bold text-orange-600 bg-slate-100">
-                                {{ number_format($totals['jumlah_keluarga_tidak_ditemui'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_tidak_ditemukan" x-cloak
-                                class="px-5 py-3 text-right font-bold text-slate-600 bg-slate-100">
-                                {{ number_format($totals['jumlah_keluarga_tidak_ditemukan'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_baru" x-cloak
-                                class="px-5 py-3 text-right font-bold text-blue-600 bg-slate-100">
-                                {{ number_format($totals['jumlah_keluarga_baru'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.prelist_usaha" x-cloak class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($totals['jumlah_prelist_usaha'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_realisasi" x-cloak
-                                class="px-5 py-3 text-right font-bold text-sky-600 bg-slate-100">
-                                {{ number_format($totals['jumlah_usaha_realisasi'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.prelist_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($totals['jumlah_prelist_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_realisasi" x-cloak
-                                class="px-5 py-3 text-right font-bold text-emerald-600 bg-slate-100">
-                                {{ number_format($totals['jumlah_keluarga_realisasi'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.ppl" x-cloak class="px-5 py-3 bg-slate-100"></td>
-
-                            <td x-show="$store.usahaColumns.pml" x-cloak class="px-5 py-3 bg-slate-100"></td>
-
-                            <td x-show="$store.usahaColumns.last_update" x-cloak class="px-5 py-3 bg-slate-100"></td>
-                        </tr>
-
-                        @foreach ($desaGroups as $namaDesa => $desaGroup)
-                            @php
-                                $desaTotals = $desaGroup['totals'];
-                                $petugasGroups = $desaGroup['petugas'];
-                                $desaKey = \Illuminate\Support\Str::slug($kecamatan . '-' . $namaDesa) ?: md5($kecamatan . $namaDesa);
-                            @endphp
-
-                            {{-- ROW: DESA --}}
-                            <tr x-show="open" x-cloak @click="openDesa['{{ $desaKey }}'] = !openDesa['{{ $desaKey }}']"
-                                class="bg-slate-100 hover:bg-slate-200 cursor-pointer transition-colors">
-
-                                <td
-                                    class="px-5 py-3 pl-10 font-semibold text-slate-700 whitespace-nowrap sticky left-0 z-10 bg-slate-100">
-                                    <span x-text="openDesa['{{ $desaKey }}'] ? '▾' : '▸'" class="mr-2 text-slate-400"></span>
-                                    {{ $loop->iteration }}. {{ $namaDesa }}
-                                </td>
-
-                                <td x-show="$store.usahaColumns.id_wilayah" x-cloak class="px-5 py-3 bg-slate-100"></td>
-                                <td x-show="$store.usahaColumns.kd_kab" x-cloak class="px-5 py-3 bg-slate-100"></td>
-                                <td x-show="$store.usahaColumns.desa" x-cloak class="px-5 py-3 bg-slate-100"></td>
-                                <td x-show="$store.usahaColumns.nama_sls" x-cloak class="px-5 py-3 bg-slate-100"></td>
-
-                                <td x-show="$store.usahaColumns.ub_prelist" x-cloak class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_ub_prelist_awal'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.um_prelist" x-cloak class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_um_prelist_awal'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.umk_prelist" x-cloak
-                                class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_umk_prelist_awal'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ditemukan_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-emerald-600 bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_usaha_ditemukan_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ditutup_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-red-600 bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_usaha_ditutup_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ganda_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-amber-600 bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_usaha_ganda_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-slate-600 bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_usaha_tidak_ditemukan_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_baru_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-blue-600 bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_usaha_baru_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ditemukan_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_usaha_ditemukan_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_tutup_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_usaha_tutup_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ganda_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_usaha_ganda_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_usaha_tidak_ditemukan_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_baru_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_usaha_baru_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_ditemukan" x-cloak
-                                class="px-5 py-3 text-right font-bold text-emerald-600 bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_keluarga_ditemukan'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_meninggal" x-cloak
-                                class="px-5 py-3 text-right font-bold text-red-600 bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_keluarga_meninggal'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_tidak_eligible" x-cloak
-                                class="px-5 py-3 text-right font-bold text-amber-600 bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_keluarga_tidak_eligible'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_tidak_ditemui" x-cloak
-                                class="px-5 py-3 text-right font-bold text-orange-600 bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_keluarga_tidak_ditemui'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_tidak_ditemukan" x-cloak
-                                class="px-5 py-3 text-right font-bold text-slate-600 bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_keluarga_tidak_ditemukan'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_baru" x-cloak
-                                class="px-5 py-3 text-right font-bold text-blue-600 bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_keluarga_baru'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.prelist_usaha" x-cloak
-                                class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_prelist_usaha'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_realisasi" x-cloak
-                                class="px-5 py-3 text-right font-bold text-sky-600 bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_usaha_realisasi'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.prelist_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_prelist_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_realisasi" x-cloak
-                                class="px-5 py-3 text-right font-bold text-emerald-600 bg-slate-100">
-                                {{ number_format($desaTotals['jumlah_keluarga_realisasi'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.ppl" x-cloak class="px-5 py-3 bg-slate-100"></td>
-
-                            <td x-show="$store.usahaColumns.pml" x-cloak class="px-5 py-3 bg-slate-100"></td>
-
-                            <td x-show="$store.usahaColumns.last_update" x-cloak class="px-5 py-3 bg-slate-100"></td>
-                            </tr>
-
-                            @foreach ($petugasGroups as $namaPetugas => $rows)
-                                <template x-if="open && openDesa['{{ $desaKey }}']">
-                                <tr class="bg-slate-50 hover:bg-slate-100 transition-colors">
-
-                                    <td class="px-5 py-3 pl-14 whitespace-nowrap sticky left-0 z-10 bg-slate-50">
-                                        <div class="font-semibold text-slate-600 text-sm">{{ $namaPetugas }}</div>
-                                        <div class="text-xs text-slate-400">{{ $rows->first()->email_petugas ?: '-' }}</div>
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.id_wilayah" x-cloak class="px-5 py-3 bg-slate-50"></td>
-                                    <td x-show="$store.usahaColumns.kd_kab" x-cloak class="px-5 py-3 bg-slate-50"></td>
-                                    <td x-show="$store.usahaColumns.desa" x-cloak class="px-5 py-3 bg-slate-50"></td>
-                                    <td x-show="$store.usahaColumns.nama_sls" x-cloak class="px-5 py-3 bg-slate-50"></td>
-
-                                    <td x-show="$store.usahaColumns.ub_prelist" x-cloak
-                                        class="px-5 py-3 text-right font-semibold bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_ub_prelist_awal')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.um_prelist" x-cloak
-                                        class="px-5 py-3 text-right font-semibold bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_um_prelist_awal')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.umk_prelist" x-cloak
-                                        class="px-5 py-3 text-right font-semibold bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_umk_prelist_awal')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.usaha_ditemukan_bku" x-cloak
-                                        class="px-5 py-3 text-right font-semibold text-emerald-600 bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_usaha_ditemukan_bku')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.usaha_ditutup_bku" x-cloak
-                                        class="px-5 py-3 text-right font-semibold text-red-600 bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_usaha_ditutup_bku')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.usaha_ganda_bku" x-cloak
-                                        class="px-5 py-3 text-right font-semibold text-amber-600 bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_usaha_ganda_bku')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_bku" x-cloak
-                                        class="px-5 py-3 text-right font-semibold text-slate-600 bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_usaha_tidak_ditemukan_bku')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.usaha_baru_bku" x-cloak
-                                        class="px-5 py-3 text-right font-semibold text-blue-600 bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_usaha_baru_bku')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.usaha_ditemukan_keluarga" x-cloak
-                                        class="px-5 py-3 text-right font-semibold bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_usaha_ditemukan_usaha_keluarga')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.usaha_tutup_keluarga" x-cloak
-                                        class="px-5 py-3 text-right font-semibold bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_usaha_tutup_usaha_keluarga')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.usaha_ganda_keluarga" x-cloak
-                                        class="px-5 py-3 text-right font-semibold bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_usaha_ganda_usaha_keluarga')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_keluarga" x-cloak
-                                        class="px-5 py-3 text-right font-semibold bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_usaha_tidak_ditemukan_usaha_keluarga')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.usaha_baru_keluarga" x-cloak
-                                        class="px-5 py-3 text-right font-semibold bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_usaha_baru_usaha_keluarga')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.keluarga_ditemukan" x-cloak
-                                        class="px-5 py-3 text-right font-semibold text-emerald-600 bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_keluarga_ditemukan')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.keluarga_meninggal" x-cloak
-                                        class="px-5 py-3 text-right font-semibold text-red-600 bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_keluarga_meninggal')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.keluarga_tidak_eligible" x-cloak
-                                        class="px-5 py-3 text-right font-semibold text-amber-600 bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_keluarga_tidak_eligible')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.keluarga_tidak_ditemui" x-cloak
-                                        class="px-5 py-3 text-right font-semibold text-orange-600 bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_keluarga_tidak_ditemui')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.keluarga_tidak_ditemukan" x-cloak
-                                        class="px-5 py-3 text-right font-semibold text-slate-600 bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_keluarga_tidak_ditemukan')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.keluarga_baru" x-cloak
-                                        class="px-5 py-3 text-right font-semibold text-blue-600 bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_keluarga_baru')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.prelist_usaha" x-cloak
-                                        class="px-5 py-3 text-right font-semibold bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_prelist_usaha')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.usaha_realisasi" x-cloak
-                                        class="px-5 py-3 text-right font-semibold text-sky-600 bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_usaha_realisasi')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.prelist_keluarga" x-cloak
-                                        class="px-5 py-3 text-right font-semibold bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_prelist_keluarga')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.keluarga_realisasi" x-cloak
-                                        class="px-5 py-3 text-right font-semibold text-emerald-600 bg-slate-50">
-                                        {{ number_format($rows->sum('jumlah_keluarga_realisasi')) }}
-                                    </td>
-
-                                    <td x-show="$store.usahaColumns.ppl" x-cloak class="px-5 py-3 bg-slate-50"></td>
-                                    <td x-show="$store.usahaColumns.pml" x-cloak class="px-5 py-3 bg-slate-50"></td>
-                                    <td x-show="$store.usahaColumns.last_update" x-cloak class="px-5 py-3 bg-slate-50"></td>
-                                </tr>
-                                </template>
-
-                                @foreach ($rows as $i => $row)
-                                    <template x-if="open && openDesa['{{ $desaKey }}']">
-                                    <tr class="hover:bg-slate-50 transition-colors">
-
-                                        <td class="px-5 py-3 text-slate-400">{{ $i + 1 }}</td>
-
-                                        <td x-show="$store.usahaColumns.id_wilayah" x-cloak class="px-5 py-3 text-slate-600">
-                                            {{ $row->id_wilayah ?: '-' }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.kd_kab" x-cloak class="px-5 py-3 text-slate-600">
-                                            {{ $row->kd_kab ?: '-' }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.desa" x-cloak class="px-5 py-3 text-slate-600">
-                                            {{ $row->nama_desa ?: '-' }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.nama_sls" x-cloak class="px-5 py-3">
-                                            <div class="font-semibold text-slate-700">{{ $row->nama_sls ?: '-' }}</div>
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.ub_prelist" x-cloak
-                                            class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_ub_prelist_awal ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.um_prelist" x-cloak
-                                            class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_um_prelist_awal ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.umk_prelist" x-cloak
-                                            class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_umk_prelist_awal ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.usaha_ditemukan_bku" x-cloak
-                                            class="px-5 py-3 text-right font-semibold text-emerald-600">
-                                            {{ number_format($row->jumlah_usaha_ditemukan_bku ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.usaha_ditutup_bku" x-cloak
-                                            class="px-5 py-3 text-right font-semibold text-red-600">
-                                            {{ number_format($row->jumlah_usaha_ditutup_bku ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.usaha_ganda_bku" x-cloak
-                                            class="px-5 py-3 text-right font-semibold text-amber-600">
-                                            {{ number_format($row->jumlah_usaha_ganda_bku ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_bku" x-cloak
-                                            class="px-5 py-3 text-right font-semibold text-slate-600">
-                                            {{ number_format($row->jumlah_usaha_tidak_ditemukan_bku ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.usaha_baru_bku" x-cloak
-                                            class="px-5 py-3 text-right font-semibold text-blue-600">
-                                            {{ number_format($row->jumlah_usaha_baru_bku ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.usaha_ditemukan_keluarga" x-cloak
-                                            class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_usaha_ditemukan_usaha_keluarga ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.usaha_tutup_keluarga" x-cloak
-                                            class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_usaha_tutup_usaha_keluarga ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.usaha_ganda_keluarga" x-cloak
-                                            class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_usaha_ganda_usaha_keluarga ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_keluarga" x-cloak
-                                            class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_usaha_tidak_ditemukan_usaha_keluarga ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.usaha_baru_keluarga" x-cloak
-                                            class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_usaha_baru_usaha_keluarga ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.keluarga_ditemukan" x-cloak
-                                            class="px-5 py-3 text-right font-semibold text-emerald-600">
-                                            {{ number_format($row->jumlah_keluarga_ditemukan ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.keluarga_meninggal" x-cloak
-                                            class="px-5 py-3 text-right font-semibold text-red-600">
-                                            {{ number_format($row->jumlah_keluarga_meninggal ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.keluarga_tidak_eligible" x-cloak
-                                            class="px-5 py-3 text-right font-semibold text-amber-600">
-                                            {{ number_format($row->jumlah_keluarga_tidak_eligible ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.keluarga_tidak_ditemui" x-cloak
-                                            class="px-5 py-3 text-right font-semibold text-orange-600">
-                                            {{ number_format($row->jumlah_keluarga_tidak_ditemui ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.keluarga_tidak_ditemukan" x-cloak
-                                            class="px-5 py-3 text-right font-semibold text-slate-600">
-                                            {{ number_format($row->jumlah_keluarga_tidak_ditemukan ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.keluarga_baru" x-cloak
-                                            class="px-5 py-3 text-right font-semibold text-blue-600">
-                                            {{ number_format($row->jumlah_keluarga_baru ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.prelist_usaha" x-cloak
-                                            class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_prelist_usaha ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.usaha_realisasi" x-cloak
-                                            class="px-5 py-3 text-right font-semibold text-sky-600">
-                                            {{ number_format($row->jumlah_usaha_realisasi ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.prelist_keluarga" x-cloak
-                                            class="px-5 py-3 text-right font-semibold">
-                                            {{ number_format($row->jumlah_prelist_keluarga ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.keluarga_realisasi" x-cloak
-                                            class="px-5 py-3 text-right font-semibold text-emerald-600">
-                                            {{ number_format($row->jumlah_keluarga_realisasi ?? 0) }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.ppl" x-cloak class="px-5 py-3 text-slate-600">
-                                            {{ $row->ppl ?: '-' }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.pml" x-cloak class="px-5 py-3 text-slate-600">
-                                            {{ $row->pml ?: '-' }}
-                                        </td>
-
-                                        <td x-show="$store.usahaColumns.last_update" x-cloak
-                                            class="px-5 py-3 text-slate-600 whitespace-nowrap">
-                                            {{ $row->last_update ?: '-' }}
-                                        </td>
-
-                                    </tr>
-                                    </template>
-                                @endforeach
-                            @endforeach
-                        @endforeach
-                    </tbody>
-
-                    @empty
-
-
-                        <tbody>
-                            <tr>
-                                <td colspan="30" class="px-5 py-10 text-center text-slate-400">
-                                    Belum ada data Usaha.
-                                </td>
-                            </tr>
-                        </tbody>
-
-                    @endforelse
-                    <tfoot>
-                        <tr class="bg-slate-200 border-t-2 border-slate-300">
-
-                            <td class="px-5 py-3 font-bold text-slate-700 whitespace-nowrap">
-                                TOTAL KESELURUHAN
-                            </td>
-
-                            <td x-show="$store.usahaColumns.id_wilayah" x-cloak class="px-5 py-3"></td>
-
-                            <td x-show="$store.usahaColumns.kd_kab" x-cloak class="px-5 py-3"></td>
-
-                            <td x-show="$store.usahaColumns.nama_sls" x-cloak class="px-5 py-3"></td>
-
-                            <td x-show="$store.usahaColumns.ub_prelist" x-cloak class="px-5 py-3 text-right font-bold">
-                                {{ number_format($grandTotals['jumlah_ub_prelist_awal'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.um_prelist" x-cloak class="px-5 py-3 text-right font-bold">
-                                {{ number_format($grandTotals['jumlah_um_prelist_awal'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.umk_prelist" x-cloak class="px-5 py-3 text-right font-bold">
-                                {{ number_format($grandTotals['jumlah_umk_prelist_awal'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ditemukan_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-emerald-600">
-                                {{ number_format($grandTotals['jumlah_usaha_ditemukan_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ditutup_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-red-600">
-                                {{ number_format($grandTotals['jumlah_usaha_ditutup_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ganda_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-amber-600">
-                                {{ number_format($grandTotals['jumlah_usaha_ganda_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-slate-600">
-                                {{ number_format($grandTotals['jumlah_usaha_tidak_ditemukan_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_baru_bku" x-cloak
-                                class="px-5 py-3 text-right font-bold text-blue-600">
-                                {{ number_format($grandTotals['jumlah_usaha_baru_bku'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ditemukan_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold">
-                                {{ number_format($grandTotals['jumlah_usaha_ditemukan_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_tutup_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold">
-                                {{ number_format($grandTotals['jumlah_usaha_tutup_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_ganda_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold">
-                                {{ number_format($grandTotals['jumlah_usaha_ganda_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_tidak_ditemukan_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold">
-                                {{ number_format($grandTotals['jumlah_usaha_tidak_ditemukan_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_baru_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold">
-                                {{ number_format($grandTotals['jumlah_usaha_baru_usaha_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_ditemukan" x-cloak
-                                class="px-5 py-3 text-right font-bold text-emerald-600">
-                                {{ number_format($grandTotals['jumlah_keluarga_ditemukan'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_meninggal" x-cloak
-                                class="px-5 py-3 text-right font-bold text-red-600">
-                                {{ number_format($grandTotals['jumlah_keluarga_meninggal'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_tidak_eligible" x-cloak
-                                class="px-5 py-3 text-right font-bold text-amber-600">
-                                {{ number_format($grandTotals['jumlah_keluarga_tidak_eligible'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_tidak_ditemui" x-cloak
-                                class="px-5 py-3 text-right font-bold text-orange-600">
-                                {{ number_format($grandTotals['jumlah_keluarga_tidak_ditemui'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_tidak_ditemukan" x-cloak
-                                class="px-5 py-3 text-right font-bold text-slate-600">
-                                {{ number_format($grandTotals['jumlah_keluarga_tidak_ditemukan'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_baru" x-cloak
-                                class="px-5 py-3 text-right font-bold text-blue-600">
-                                {{ number_format($grandTotals['jumlah_keluarga_baru'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.prelist_usaha" x-cloak class="px-5 py-3 text-right font-bold">
-                                {{ number_format($grandTotals['jumlah_prelist_usaha'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.usaha_realisasi" x-cloak
-                                class="px-5 py-3 text-right font-bold text-sky-600">
-                                {{ number_format($grandTotals['jumlah_usaha_realisasi'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.prelist_keluarga" x-cloak
-                                class="px-5 py-3 text-right font-bold">
-                                {{ number_format($grandTotals['jumlah_prelist_keluarga'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.keluarga_realisasi" x-cloak
-                                class="px-5 py-3 text-right font-bold text-emerald-600">
-                                {{ number_format($grandTotals['jumlah_keluarga_realisasi'] ?? 0) }}
-                            </td>
-
-                            <td x-show="$store.usahaColumns.ppl" x-cloak class="px-5 py-3"></td>
-
-                            <td x-show="$store.usahaColumns.pml" x-cloak class="px-5 py-3"></td>
-
-                            <td x-show="$store.usahaColumns.last_update" x-cloak class="px-5 py-3"></td>
-
-                        </tr>
-                    </tfoot>
-                </table>
-
-            </div>
-
-        </div>
-
-    </div>
-
-@endsection
+        return $sums;
+    }
+}

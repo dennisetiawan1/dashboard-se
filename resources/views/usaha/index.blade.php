@@ -819,7 +819,9 @@
                                     <div class="mt-2 w-32 mx-auto bg-slate-200 rounded-full h-1.5">
                                         <div class="bg-amber-500 h-1.5 rounded-full" style="width: min({{ $persenBKU }}%, 100%)"></div>
                                     </div>
-                                    <p class="text-xs text-slate-500 mt-1">{{ $persenBKU }}%</p>
+                                    <p class="text-xs text-slate-500 mt-1">
+                                        {{ $wilkerStat > 0 ? $persenBKU.'%' : 'N/A' }}
+                                    </p>
                                 </td>
                                 <td class="px-5 py-4 text-center font-bold text-slate-900">{{ number_format($utpTotal) }}</td>
                                 <td class="px-5 py-4 text-center">
@@ -827,7 +829,9 @@
                                     <div class="mt-2 w-32 mx-auto bg-slate-200 rounded-full h-1.5">
                                         <div class="bg-purple-500 h-1.5 rounded-full" style="width: min({{ $persenUTP }}%, 100%)"></div>
                                     </div>
-                                    <p class="text-xs text-slate-500 mt-1">{{ $persenUTP }}%</p>
+                                    <p class="text-xs text-slate-500 mt-1">
+                                        {{ $st2023 > 0 ? $persenUTP.'%' : 'N/A' }}
+                                    </p>
                                 </td>
                                 <td class="px-5 py-4 text-center font-bold text-slate-900">{{ number_format($usahaKeluargaTerbaru) }}</td>
                             </tr>
